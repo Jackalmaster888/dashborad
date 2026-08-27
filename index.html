@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>個人資訊儀表板</title>
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome -->
@@ -12,6 +13,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <!-- ical.js (for parsing Google Calendar .ics) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ical.js/1.5.0/ical.min.js"></script>
+    <!-- QRCode.js for generating pairing QR code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
     <style>
         body {
@@ -71,7 +74,13 @@
         <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <i class="fa-solid fa-table-cells-large text-blue-500"></i> 個人資訊看板
         </h1>
-        <div class="flex gap-3">
+        <div class="flex items-center gap-3">
+            <!-- 雲端同步狀態標籤 -->
+            <div id="cloud-sync-status" class="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-400" title="雲端同步狀態">
+                <span class="w-2 h-2 rounded-full bg-slate-500 transition-colors" id="sync-dot"></span>
+                <span id="sync-status-text">本機模式</span>
+            </div>
+            
             <button onclick="fetchAllData()" class="p-2.5 rounded-full bg-slate-800 hover:bg-blue-600 border border-slate-700 transition-colors text-slate-300 hover:text-white group" title="手動重新整理">
                 <i class="fa-solid fa-rotate-right group-active:animate-spin" id="global-refresh-icon"></i>
             </button>
@@ -163,10 +172,10 @@
                     <div class="card-header justify-between">
                         <div class="flex items-center gap-2"><i class="fa-regular fa-calendar-days text-purple-400"></i> 行事曆</div>
                         <div class="flex gap-2">
-                            <button onclick="fetchGoogleCalendar()" class="w-8 h-8 rounded bg-slate-800 hover:bg-purple-900/50 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                            <button onclick="fetchGoogleCalendar()" class="w-8 h-8 rounded bg-slate-800 hover:bg-purple-900/50 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors" title="重新讀取 Google 日曆">
                                 <i class="fa-solid fa-rotate" id="cal-sync-icon"></i>
                             </button>
-                            <button onclick="openAddEventModal()" class="w-8 h-8 rounded bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-white transition-colors">
+                            <button onclick="openAddEventModal()" class="w-8 h-8 rounded bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-white transition-colors" title="新增個人行程">
                                 <i class="fa-solid fa-plus"></i>
                             </button>
                         </div>
@@ -237,6 +246,39 @@
             </div>
             
             <div class="p-5 overflow-y-auto flex-grow space-y-5">
+                
+                <!-- 跨裝置雲端同步設定 -->
+                <div class="bg-blue-950/40 p-4 rounded-xl border border-blue-500/30">
+                    <h3 class="text-sm font-semibold text-blue-300 mb-2 flex items-center justify-between">
+                        <span class="flex items-center gap-2"><i class="fa-solid fa-cloud text-blue-400"></i> 跨裝置雲端同步</span>
+                        <span id="modal-sync-badge" class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">未同步</span>
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-3">在不同裝置輸入相同的「同步碼」，即可自動同步所有設定與待辦事項。</p>
+                    
+                    <div class="flex gap-2 mb-3">
+                        <input type="text" id="setting-sync-id" placeholder="例如: MY-DASH-88" class="flex-grow bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white font-mono focus:border-blue-500 focus:outline-none uppercase">
+                        <button type="button" onclick="generateRandomSyncId()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 shrink-0" title="隨機產生同步碼">
+                            <i class="fa-solid fa-dice"></i> 隨機
+                        </button>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="toggleQRCodeDisplay()" class="flex-1 py-2 px-3 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 rounded-lg text-xs text-blue-300 transition-colors flex items-center justify-center gap-1.5 font-medium">
+                            <i class="fa-solid fa-qrcode"></i> 手機掃描配對
+                        </button>
+                        <button type="button" onclick="copyShareLink()" class="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition-colors flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-link"></i> 複製配對連結
+                        </button>
+                    </div>
+
+                    <!-- QR Code 顯示區域 -->
+                    <div id="qrcode-wrapper" class="hidden mt-3 p-4 bg-white rounded-xl flex flex-col items-center justify-center gap-2 transition-all">
+                        <div id="qrcode-container"></div>
+                        <p class="text-xs text-slate-800 font-medium text-center m-0">用手機相機掃描上方 QR Code，即可直接開啟並同步！</p>
+                    </div>
+                </div>
+
+                <!-- 港鐵 MTR -->
                 <div>
                     <h3 class="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2"><i class="fa-solid fa-train text-amber-500"></i> 港鐵 MTR</h3>
                     <div class="grid grid-cols-2 gap-3">
@@ -263,6 +305,7 @@
                     </div>
                 </div>
 
+                <!-- MTR 巴士 -->
                 <div>
                     <h3 class="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2"><i class="fa-solid fa-bus text-amber-500"></i> MTR 巴士</h3>
                     <div class="grid grid-cols-2 gap-3">
@@ -284,309 +327,477 @@
                     </div>
                 </div>
 
-                <div>
-                    <h3 class="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2"><i class="fa-regular fa-calendar text-purple-400"></i> 行事曆 iCal</h3>
-                    <label class="block text-xs text-slate-400 mb-1">Google iCal 網址 (.ics)</label>
-                    <input type="text" id="setting-ical-url" placeholder="https://..." class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none">
-                </div>
-
+                <!-- 股票設定 -->
                 <div>
                     <h3 class="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2"><i class="fa-solid fa-chart-line text-emerald-400"></i> 股票設定</h3>
-                    <label class="block text-xs text-slate-400 mb-1">Finnhub API Key (選填)</label>
-                    <input type="password" id="setting-finnhub-key" placeholder="貼上 API Key" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none mb-2">
-                    <label class="block text-xs text-slate-400 mb-1">關注股票代號 (逗號分隔)</label>
-                    <input type="text" id="setting-stocks" placeholder="如: HSI, 0700.HK, AAPL" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white uppercase focus:outline-none">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Finnhub API Key</label>
+                            <input type="text" id="setting-finnhub-key" placeholder="輸入 Finnhub API Key" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 focus:outline-none font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">追蹤股票清單 (以逗號分隔)</label>
+                            <input type="text" id="setting-stocks" placeholder="如: HSI, 0700.HK, 9988.HK, AAPL" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 focus:outline-none">
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Google 日曆設定 -->
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2"><i class="fa-regular fa-calendar text-purple-400"></i> Google 日曆</h3>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">iCal 網址 (.ics)</label>
+                        <input type="text" id="setting-ical-url" placeholder="https://calendar.google.com/.../basic.ics" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:border-blue-500 focus:outline-none font-mono">
+                    </div>
+                </div>
+
             </div>
-            
-            <div class="p-4 border-t border-slate-700 bg-slate-800/50 flex justify-end gap-3 rounded-b-2xl">
-                <button onclick="closeSettingsModal()" class="px-4 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-700 transition-colors">取消</button>
-                <button onclick="saveSettings()" class="px-4 py-2 rounded-lg text-sm bg-blue-600 hover:bg-blue-500 text-white transition-colors">儲存變更</button>
+
+            <div class="p-4 border-t border-slate-700 flex justify-end gap-3 shrink-0">
+                <button type="button" onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-sm transition-colors">取消</button>
+                <button type="button" onclick="saveSettings()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl text-sm transition-colors">儲存變更</button>
             </div>
         </div>
     </div>
 
-    <!-- 模態框：新增行程 -->
-    <div id="event-modal" class="fixed inset-0 bg-slate-900/80 modal-backdrop z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col">
+    <!-- 模態框：新增待辦事項 -->
+    <div id="add-event-modal" class="fixed inset-0 bg-slate-900/80 modal-backdrop z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
             <div class="p-5 border-b border-slate-700 flex justify-between items-center">
-                <h2 class="text-lg font-bold text-white">新增待辦事項</h2>
-                <button onclick="closeAddEventModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+                <h2 class="text-xl font-bold text-white"><i class="fa-solid fa-plus text-blue-400 mr-2"></i>新增待辦行程</h2>
+                <button onclick="closeAddEventModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
-            
-            <form id="add-event-form" class="p-5 flex flex-col gap-4" onsubmit="handleAddEvent(event)">
+            <form id="add-event-form" onsubmit="handleAddEvent(event)" class="p-5 space-y-4">
                 <div>
-                    <label class="block text-xs text-slate-400 mb-1">標題</label>
-                    <input type="text" id="event-title" required class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none">
+                    <label class="block text-xs text-slate-400 mb-1">行程標題</label>
+                    <input type="text" id="event-title" required placeholder="例如: 團隊週會" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:border-blue-500 focus:outline-none">
                 </div>
-                
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">日期</label>
-                        <select id="event-day-type" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none">
+                        <label class="block text-xs text-slate-400 mb-1">日期類別</label>
+                        <select id="event-day-type" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:border-blue-500 focus:outline-none">
                             <option value="今天">今天</option>
                             <option value="明天">明天</option>
-                            <option value="本週">本週內</option>
+                            <option value="本週">本週</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">時間</label>
-                        <input type="time" id="event-time" required class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none color-scheme-dark">
+                        <label class="block text-xs text-slate-400 mb-1">時間 (例如 14:30)</label>
+                        <input type="text" id="event-time" required placeholder="14:30" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:border-blue-500 focus:outline-none">
                     </div>
                 </div>
-
                 <div>
-                    <label class="block text-xs text-slate-400 mb-2">標籤顏色</label>
-                    <div class="flex gap-3">
-                        <label class="cursor-pointer">
-                            <input type="radio" name="event-color" value="blue" checked class="peer sr-only">
-                            <div class="w-6 h-6 rounded-full bg-blue-500 border-2 border-transparent peer-checked:border-white transition-all"></div>
+                    <label class="block text-xs text-slate-400 mb-1">標籤顏色</label>
+                    <div class="flex gap-4 pt-1">
+                        <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                            <input type="radio" name="event-color" value="blue" checked class="text-blue-500 focus:ring-0"> 藍色
                         </label>
-                        <label class="cursor-pointer">
-                            <input type="radio" name="event-color" value="green" class="peer sr-only">
-                            <div class="w-6 h-6 rounded-full bg-emerald-500 border-2 border-transparent peer-checked:border-white transition-all"></div>
+                        <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                            <input type="radio" name="event-color" value="green" class="text-emerald-500 focus:ring-0"> 綠色
                         </label>
                     </div>
                 </div>
-
-                <div class="mt-2 flex justify-end gap-3">
-                    <button type="button" onclick="closeAddEventModal()" class="px-4 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-700 transition-colors">取消</button>
-                    <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-blue-600 hover:bg-blue-500 text-white transition-colors">新增</button>
+                <div class="pt-3 flex justify-end gap-3">
+                    <button type="button" onclick="closeAddEventModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-sm transition-colors">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl text-sm transition-colors">加入行程</button>
                 </div>
             </form>
         </div>
     </div>
 
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-dashboard-app';
+        let db = null;
+        let auth = null;
+        let unsubscribeSync = null;
+
+        let firebaseConfig = null;
+        if (typeof __firebase_config !== 'undefined') {
+            try { firebaseConfig = JSON.parse(__firebase_config); } catch(e){}
+        }
+
+        if (firebaseConfig) {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            const initAuth = async () => {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch(e) {
+                    try { await signInAnonymously(auth); } catch(err){}
+                }
+            };
+
+            initAuth().then(() => {
+                window.cloudSyncReady = true;
+                if (window.onCloudReady) window.onCloudReady();
+            });
+        }
+
+        window.cloudSyncManager = {
+            async pushData(syncId, data) {
+                if (!db || !auth || !auth.currentUser || !syncId) return;
+                try {
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboards', syncId.toLowerCase());
+                    await setDoc(docRef, { ...data, updatedAt: Date.now() }, { merge: true });
+                    window.updateSyncBadgeStatus(true);
+                } catch(e) {
+                    console.error("Cloud push failed:", e);
+                }
+            },
+            listenData(syncId, callback) {
+                if (!db || !syncId) return;
+                if (unsubscribeSync) unsubscribeSync();
+
+                window.updateSyncBadgeStatus(false, "連線中...");
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboards', syncId.toLowerCase());
+                
+                unsubscribeSync = onSnapshot(docRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        callback(docSnap.data());
+                        window.updateSyncBadgeStatus(true);
+                    } else {
+                        window.updateSyncBadgeStatus(true, "新同步碼");
+                    }
+                }, (err) => {
+                    console.error("Cloud listen failed:", err);
+                    window.updateSyncBadgeStatus(false, "連線錯誤");
+                });
+            }
+        };
+    </script>
+
     <script>
+        /* ================== DATA MAPS & DICTIONARIES ================== */
+        const mtrStationsMap = {
+            TWL: [{c:'CEN',n:'中環'},{c:'ADM',n:'金鐘'},{c:'TST',n:'尖沙咀'},{c:'JOR',n:'佐敦'},{c:'YMT',n:'油麻地'},{c:'MOK',n:'旺角'},{c:'PRIN',n:'太子'},{c:'SSP',n:'深水埗'},{c:'CSW',n:'長沙灣'},{c:'LCK',n:'荔枝角'},{c:'MEI',n:'美孚'},{c:'LAK',n:'荔景'},{c:'KWF',n:'葵芳'},{c:'KVT',n:'葵興'},{c:'TWH',n:'大窩口'},{c:'TWW',n:'荃灣'}],
+            KTL: [{c:'WHA',n:'黃埔'},{c:'HOM',n:'何文田'},{c:'YMT',n:'油麻地'},{c:'MOK',n:'旺角'},{c:'PRIN',n:'太子'},{c:'SKM',n:'石硤尾'},{c:'KOT',n:'九龍塘'},{c:'LOF',n:'樂富'},{c:'WTS',n:'黃大仙'},{c:'DIH',n:'鑽石山'},{c:'CHH',n:'彩虹'},{c:'KOB',n:'九龍灣'},{c:'NTK',n:'牛頭角'},{c:'KWT',n:'觀塘'},{c:'LAT',n:'藍田'},{c:'YAT',n:'油塘'},{c:'TIK',n:'調景嶺'}],
+            ISL: [{c:'KET',n:'堅尼地城'},{c:'HKU',n:'香港大學'},{c:'SYP',n:'西營盤'},{c:'SHW',n:'上環'},{c:'CEN',n:'中環'},{c:'ADM',n:'金鐘'},{c:'WAC',n:'灣仔'},{c:'CAB',n:'銅鑼灣'},{c:'TIH',n:'天后'},{c:'FOH',n:'炮台山'},{c:'NOP',n:'北角'},{c:'QUB',n:'鰂魚涌'},{c:'TAK',n:'太古'},{c:'SWH',n:'西灣河'},{c:'SKW',n:'筲箕灣'},{c:'HFC',n:'杏花邨'},{c:'CHW',n:'柴灣'}],
+            EAL: [{c:'ADM',n:'金鐘'},{c:'EXC',n:'會展'},{c:'HUH',n:'紅磡'},{c:'MOK',n:'旺角東'},{c:'KOT',n:'九龍塘'},{c:'TAW',n:'大圍'},{c:'SHT',n:'沙田'},{c:'FOT',n:'火炭'},{c:'RAC',n:'馬場'},{c:'TAP',n:'大埔墟'},{c:'TWO',n:'太和'},{c:'FAN',n:'粉嶺'},{c:'SHS',n:'上水'},{c:'LOW',n:'羅湖'},{c:'LKM',n:'落馬洲'}],
+            TML: [{c:'WKS',n:'烏溪沙'},{c:'MOS',n:'馬鞍山'},{c:'HEO',n:'恒安'},{c:'TSH',n:'大水坑'},{c:'SHE',n:'石門'},{c:'CIO',n:'第一城'},{c:'STW',n:'沙田圍'},{c:'CKT',n:'車公廟'},{c:'TAW',n:'大圍'},{c:'HIK',n:'顯徑'},{c:'DIH',n:'鑽石山'},{c:'KAT',n:'啟德'},{c:'SUW',n:'宋皇臺'},{c:'TKW',n:'土瓜灣'},{c:'HOM',n:'何文田'},{c:'HUH',n:'紅磡'},{c:'ETS',n:'尖東'},{c:'AUS',n:'柯士甸'},{c:'MEI',n:'美孚'},{c:'TWW',n:'荃灣西'},{c:'KSR',n:'錦上路'},{c:'YUL',n:'元朗'},{c:'LOP',n:'朗屏'},{c:'TIS',n:'天水圍'},{c:'SIH',n:'兆康'},{c:'TUM',n:'屯門'}],
+            TCL: [{c:'HOK',n:'香港'},{c:'KOW',n:'九龍'},{c:'OLY',n:'奧運'},{c:'LAK',n:'荔景'},{c:'TSY',n:'青衣'},{c:'SUN',n:'欣澳'},{c:'TTC',n:'東涌'}],
+            TKL: [{c:'NOP',n:'北角'},{c:'QUB',n:'鰂魚涌'},{c:'YAT',n:'油塘'},{c:'TIK',n:'調景嶺'},{c:'TKO',n:'將軍澳'},{c:'LHA',n:'坑口'},{c:'POA',n:'寶琳'},{c:'LHP',n:'康城'}],
+            AEL: [{c:'HOK',n:'香港'},{c:'KOW',n:'九龍'},{c:'TSY',n:'青衣'},{c:'AIR',n:'機場'},{c:'AWE',n:'博覽館'}],
+            SIL: [{c:'ADM',n:'金鐘'},{c:'OCP',n:'海洋公園'},{c:'WCH',n:'黃竹坑'},{c:'LET',n:'利東'},{c:'SOH',n:'海怡半島'}]
+        };
+
+        const weatherStations = [
+            { name: '京士柏', lat: 22.3119, lng: 114.1728 },
+            { name: '香港天文台', lat: 22.3022, lng: 114.1742 },
+            { name: '黃竹坑', lat: 22.2478, lng: 114.1736 },
+            { name: '打鼓嶺', lat: 22.5286, lng: 114.1567 },
+            { name: '流浮山', lat: 22.4689, lng: 113.9836 },
+            { name: '大埔', lat: 22.4433, lng: 114.1836 },
+            { name: '沙田', lat: 22.4025, lng: 114.2100 },
+            { name: '屯門', lat: 22.3858, lng: 113.9642 },
+            { name: '將軍澳', lat: 22.3158, lng: 114.2556 },
+            { name: '西貢', lat: 22.3836, lng: 114.2708 },
+            { name: '長洲', lat: 22.2011, lng: 114.0267 },
+            { name: '赤鱲角', lat: 22.3094, lng: 113.9219 },
+            { name: '青衣', lat: 22.3442, lng: 114.1100 },
+            { name: '荃灣城門谷', lat: 22.3756, lng: 114.1269 },
+            { name: '香港公園', lat: 22.2783, lng: 114.1622 },
+            { name: '筲箕灣', lat: 22.2819, lng: 114.2361 },
+            { name: '九龍城', lat: 22.3319, lng: 114.1883 },
+            { name: '跑馬地', lat: 22.2706, lng: 114.1828 },
+            { name: '黃大仙', lat: 22.3394, lng: 114.1953 },
+            { name: '觀塘', lat: 22.3186, lng: 114.2247 },
+            { name: '深水埗', lat: 22.3331, lng: 114.1569 }
+        ];
+
         /* ================== STATE & CONFIG ================== */
         let userConfig = {
+            syncId: '',
             finnhubApiKey: 'da7rccpr01qj8fm7ttd0da7rccpr01qj8fm7ttdg',
             stocks: ['HSI', '0700.HK', '9988.HK', 'AAPL'],
             mtrLine: 'TWL',
             mtrSta: 'CEN',
             busRoute: 'K65',
-            busStopId: '', // 儲存使用者指定的車站 ID
-            busStopName: '', // 儲存車站名稱以便顯示
+            busStopId: '',
+            busStopName: '',
             icalUrl: 'https://calendar.google.com/calendar/ical/leungto%40wusichong.edu.hk/public/basic.ics'
         };
 
-        let eventsList = []; // Local storage events
-        let gCalEvents = []; // iCal fetched events
+        let eventsList = [];
+        let gCalEvents = [];
         let etaCountdown = 15;
         let gpsLocation = { lat: 22.31, lng: 114.17, name: '京士柏' };
+        let isRemoteUpdate = false;
 
-        // 港鐵路線與車站對應表
-        const mtrStationsMap = {
-            'TWL': [{c:'CEN',n:'中環'},{c:'ADM',n:'金鐘'},{c:'TST',n:'尖沙咀'},{c:'JOR',n:'佐敦'},{c:'YMT',n:'油麻地'},{c:'MOK',n:'旺角'},{c:'PRE',n:'太子'},{c:'SSP',n:'深水埗'},{c:'CSW',n:'長沙灣'},{c:'LCK',n:'荔枝角'},{c:'MEF',n:'美孚'},{c:'LAK',n:'荔景'},{c:'KWF',n:'葵芳'},{c:'KWH',n:'葵興'},{c:'TWH',n:'大窩口'},{c:'TSW',n:'荃灣'}],
-            'KTL': [{c:'WHA',n:'黃埔'},{c:'HOM',n:'何文田'},{c:'YMT',n:'油麻地'},{c:'MOK',n:'旺角'},{c:'PRE',n:'太子'},{c:'SKM',n:'石硤尾'},{c:'KOT',n:'九龍塘'},{c:'LOF',n:'樂富'},{c:'WTS',n:'黃大仙'},{c:'DIH',n:'鑽石山'},{c:'CHH',n:'彩虹'},{c:'KOB',n:'九龍灣'},{c:'NTK',n:'牛頭角'},{c:'KWT',n:'觀塘'},{c:'LAT',n:'藍田'},{c:'YAT',n:'油塘'},{c:'TIK',n:'調景嶺'}],
-            'ISL': [{c:'KET',n:'堅尼地城'},{c:'HKU',n:'香港大學'},{c:'SYP',n:'西營盤'},{c:'SHW',n:'上環'},{c:'CEN',n:'中環'},{c:'ADM',n:'金鐘'},{c:'WAC',n:'灣仔'},{c:'CAB',n:'銅鑼灣'},{c:'TIH',n:'天后'},{c:'FOH',n:'炮台山'},{c:'NOP',n:'北角'},{c:'QUB',n:'鰂魚涌'},{c:'TAK',n:'太古'},{c:'SWH',n:'西灣河'},{c:'SKW',n:'筲箕灣'},{c:'HFC',n:'杏花邨'},{c:'CHW',n:'柴灣'}],
-            'EAL': [{c:'ADM',n:'金鐘'},{c:'EXC',n:'會展'},{c:'HUH',n:'紅磡'},{c:'MKK',n:'旺角東'},{c:'KOT',n:'九龍塘'},{c:'TAW',n:'大圍'},{c:'SHT',n:'沙田'},{c:'FOT',n:'火炭'},{c:'RAC',n:'馬場'},{c:'UNI',n:'大學'},{c:'TAP',n:'大埔墟'},{c:'TWO',n:'太和'},{c:'FAN',n:'粉嶺'},{c:'SHS',n:'上水'},{c:'LOW',n:'羅湖'},{c:'LMC',n:'落馬洲'}],
-            'TML': [{c:'WKS',n:'烏溪沙'},{c:'MOS',n:'馬鞍山'},{c:'HEO',n:'恆安'},{c:'TSH',n:'大水坑'},{c:'SHM',n:'石門'},{c:'CIO',n:'第一城'},{c:'STW',n:'沙田圍'},{c:'CKT',n:'車公廟'},{c:'TAW',n:'大圍'},{c:'HIK',n:'顯徑'},{c:'DIH',n:'鑽石山'},{c:'KAT',n:'啟德'},{c:'SUW',n:'宋皇臺'},{c:'TKW',n:'土瓜灣'},{c:'HOM',n:'何文田'},{c:'HUH',n:'紅磡'},{c:'ETS',n:'尖東'},{c:'AUS',n:'柯士甸'},{c:'NAC',n:'南昌'},{c:'MEF',n:'美孚'},{c:'TWW',n:'荃灣西'},{c:'KSR',n:'錦上路'},{c:'YUL',n:'元朗'},{c:'LOP',n:'朗屏'},{c:'TIS',n:'天水圍'},{c:'SIH',n:'兆康'},{c:'TUM',n:'屯門'}],
-            'TCL': [{c:'HOK',n:'香港'},{c:'KOW',n:'九龍'},{c:'OLY',n:'奧運'},{c:'NAC',n:'南昌'},{c:'LAK',n:'荔景'},{c:'TSY',n:'青衣'},{c:'SUN',n:'欣澳'},{c:'TUC',n:'東涌'}],
-            'TKL': [{c:'NOP',n:'北角'},{c:'QUB',n:'鰂魚涌'},{c:'YAT',n:'油塘'},{c:'TIK',n:'調景嶺'},{c:'TKO',n:'將軍澳'},{c:'HAH',n:'坑口'},{c:'POA',n:'寶琳'},{c:'LHP',n:'康城'}],
-            'AEL': [{c:'HOK',n:'香港'},{c:'KOW',n:'九龍'},{c:'TSY',n:'青衣'},{c:'AIR',n:'機場'},{c:'AWE',n:'博覽館'}],
-            'SIL': [{c:'ADM',n:'金鐘'},{c:'OCP',n:'海洋公園'},{c:'WCH',n:'黃竹坑'},{c:'LET',n:'利東'},{c:'SOH',n:'海怡半島'}]
-        };
-
-        /* ================== UTILS: CLOCK ================== */
-        function startClock() {
-            const dateEl = document.getElementById('clock-date');
-            const timeEl = document.getElementById('clock-time');
-            const secEl = document.getElementById('clock-sec');
-            const days = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-
-            setInterval(() => {
-                const now = new Date();
-                dateEl.textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${days[now.getDay()]}`;
-                timeEl.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                secEl.textContent = String(now.getSeconds()).padStart(2, '0');
-            }, 1000);
+        /* ================== UTILITIES & HELPERS ================== */
+        function setInputValue(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.value = val !== undefined && val !== null ? val : '';
         }
 
-        /* ================== WEATHER & GPS ================== */
-        const hkoStations = [
-            { name: "京士柏", lat: 22.311, lng: 114.172 }, { name: "香港天文台", lat: 22.302, lng: 114.174 },
-            { name: "黃竹坑", lat: 22.247, lng: 114.172 }, { name: "打鼓嶺", lat: 22.528, lng: 114.156 },
-            { name: "大埔", lat: 22.446, lng: 114.178 }, { name: "沙田", lat: 22.402, lng: 114.209 },
-            { name: "屯門", lat: 22.389, lng: 113.976 }, { name: "將軍澳", lat: 22.315, lng: 114.259 },
-            { name: "西貢", lat: 22.379, lng: 114.274 }, { name: "長洲", lat: 22.201, lng: 114.026 },
-            { name: "赤鱲角", lat: 22.311, lng: 113.923 }, { name: "青衣", lat: 22.344, lng: 114.109 },
-            { name: "荃灣可觀", lat: 22.383, lng: 114.108 }, { name: "九龍城", lat: 22.335, lng: 114.185 },
-            { name: "黃大仙", lat: 22.339, lng: 114.205 }, { name: "觀塘", lat: 22.319, lng: 114.224 }
-        ];
-
-        function getDistance(lat1, lon1, lat2, lon2) {
-            const p = 0.017453292519943295;
-            const c = Math.cos;
-            const a = 0.5 - c((lat2 - lat1) * p)/2 + c(lat1 * p) * c(lat2 * p) * (1 - c((lon2 - lon1) * p))/2;
-            return 12742 * Math.asin(Math.sqrt(a));
+        function getInputValue(id) {
+            const el = document.getElementById(id);
+            return el ? el.value.trim() : '';
         }
 
-        function requestGPSLocation() {
-            const locEl = document.getElementById('weather-location');
-            locEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 定位中...';
+        function updateSyncBadgeStatus(isConnected, customText = null) {
+            const dot = document.getElementById('sync-dot');
+            const text = document.getElementById('sync-status-text');
+            const modalBadge = document.getElementById('modal-sync-badge');
+
+            if (isConnected) {
+                if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+                if (text) text.textContent = customText || `已同步 (${userConfig.syncId})`;
+                if (modalBadge) {
+                    modalBadge.className = "text-[10px] px-2 py-0.5 rounded bg-emerald-900/50 text-emerald-300 font-mono border border-emerald-700/50";
+                    modalBadge.textContent = "雲端同步中";
+                }
+            } else {
+                if (dot) dot.className = "w-2 h-2 rounded-full bg-amber-400";
+                if (text) text.textContent = customText || "未設定同步";
+                if (modalBadge) {
+                    modalBadge.className = "text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono";
+                    modalBadge.textContent = customText || "未設定";
+                }
+            }
+        }
+
+        function generateRandomSyncId() {
+            const randomCode = 'DASH-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+            setInputValue('setting-sync-id', randomCode);
+        }
+
+        function toggleQRCodeDisplay() {
+            const wrapper = document.getElementById('qrcode-wrapper');
+            const container = document.getElementById('qrcode-container');
+            if (!wrapper || !container) return;
             
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        let nearest = hkoStations[0];
-                        let minDistance = Infinity;
-                        hkoStations.forEach(st => {
-                            const dist = getDistance(lat, lng, st.lat, st.lng);
-                            if (dist < minDistance) { minDistance = dist; nearest = st; }
-                        });
-                        gpsLocation = { lat, lng, name: nearest.name };
-                        fetchHKOWeather();
-                    },
-                    (error) => {
-                        console.warn("GPS Failed", error);
-                        gpsLocation.name = "京士柏"; fetchHKOWeather();
-                    }, { timeout: 10000 }
-                );
-            } else { gpsLocation.name = "京士柏"; fetchHKOWeather(); }
+            if (!wrapper.classList.contains('hidden')) {
+                wrapper.classList.add('hidden');
+                return;
+            }
+
+            const currentSyncId = getInputValue('setting-sync-id');
+            if (!currentSyncId) {
+                alert("請先輸入或產生一個「同步碼」！");
+                return;
+            }
+
+            container.innerHTML = '';
+            const shareUrl = new URL(window.location.href);
+            shareUrl.searchParams.set('sync', currentSyncId);
+
+            new QRCode(container, {
+                text: shareUrl.toString(),
+                width: 150,
+                height: 150,
+                colorDark : "#0f172a",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+
+            wrapper.classList.remove('hidden');
         }
 
-        async function fetchHKOWeather() {
-            try {
-                const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc');
-                const data = await res.json();
-                
-                let tempObj = data.temperature.data.find(d => d.place === gpsLocation.name) || data.temperature.data.find(d => d.place === '京士柏');
-                document.getElementById('weather-temp').textContent = tempObj ? tempObj.value : '--';
-                document.getElementById('weather-location').innerHTML = `<i class="fa-solid fa-location-dot"></i> ${tempObj ? tempObj.place : gpsLocation.name}`;
-                
-                if (data.humidity && data.humidity.data.length > 0) document.getElementById('weather-humidity').textContent = data.humidity.data[0].value + '%';
-                if (data.uvindex && data.uvindex.data.length > 0) document.getElementById('weather-uv').textContent = data.uvindex.data[0].value;
-                
-                const warningEl = document.getElementById('weather-warning');
-                if (data.warningMessage && data.warningMessage.length > 0) {
-                    warningEl.innerHTML = `<span class="text-rose-400 font-bold">${data.warningMessage[0]}</span>`;
-                } else {
-                    warningEl.innerHTML = '<span class="text-slate-400">無生效警告</span>';
-                }
+        function copyShareLink() {
+            const currentSyncId = getInputValue('setting-sync-id');
+            if (!currentSyncId) {
+                alert("請先輸入或產生一個「同步碼」！");
+                return;
+            }
+            const shareUrl = new URL(window.location.href);
+            shareUrl.searchParams.set('sync', currentSyncId);
+            
+            const tempInput = document.createElement('input');
+            tempInput.value = shareUrl.toString();
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            
+            alert("已複製配對連結！將連結傳送到手機或平板開啟即可直接同步。");
+        }
 
-                if(data.icon && data.icon.length > 0) {
-                    const id = data.icon[0];
-                    let icon = '🌤️';
-                    if(id >= 50 && id <= 54) icon = '☀️';
-                    else if(id >= 60 && id <= 65) icon = '☁️';
-                    else if(id >= 90 && id <= 93) icon = '🌧️';
-                    else if(id >= 55 && id <= 58) icon = '🌩️';
-                    else icon = `<img src="https://www.hko.gov.hk/images/HKOWxIconOutline/pic${id}.png" class="w-10 h-10 inline" alt="Weather">`;
-                    document.getElementById('weather-icon-container').innerHTML = icon;
+        function syncToCloud() {
+            if (window.cloudSyncManager && userConfig.syncId) {
+                window.cloudSyncManager.pushData(userConfig.syncId, {
+                    config: userConfig,
+                    events: eventsList
+                });
+            }
+        }
+
+        function setupCloudListener() {
+            if (window.cloudSyncManager && userConfig.syncId) {
+                window.cloudSyncManager.listenData(userConfig.syncId, (data) => {
+                    if (!data) return;
+                    isRemoteUpdate = true;
+                    if (data.config) {
+                        userConfig = { ...userConfig, ...data.config };
+                        localStorage.setItem('dashCfg', JSON.stringify(userConfig));
+                    }
+                    if (data.events) {
+                        eventsList = data.events;
+                        localStorage.setItem('dashboardEvents', JSON.stringify(eventsList));
+                    }
+                    
+                    renderEvents();
+                    fetchAllData();
+                    isRemoteUpdate = false;
+                });
+            }
+        }
+
+        /* ================== CLOCK & FULLSCREEN ================== */
+        function startClock() {
+            function update() {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const date = String(now.getDate()).padStart(2, '0');
+                const days = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+                const dayStr = days[now.getDay()];
+
+                const hours = String(now.getHours()).padStart(2, '0');
+                const mins = String(now.getMinutes()).padStart(2, '0');
+                const secs = String(now.getSeconds()).padStart(2, '0');
+
+                const dateEl = document.getElementById('clock-date');
+                const timeEl = document.getElementById('clock-time');
+                const secEl = document.getElementById('clock-sec');
+
+                if (dateEl) dateEl.textContent = `${year}年${month}月${date}日 ${dayStr}`;
+                if (timeEl) timeEl.textContent = `${hours}:${mins}`;
+                if (secEl) secEl.textContent = secs;
+            }
+            update();
+            setInterval(update, 1000);
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
                 }
-            } catch (err) {
-                console.error("Weather error", err);
             }
         }
 
         /* ================== TRANSPORT ETA ================== */
         async function fetchTransportETA() {
-            document.getElementById('mtr-line-label').textContent = userConfig.mtrLine;
-            document.getElementById('mtr-sta-label').textContent = userConfig.mtrSta;
+            const lineLabel = document.getElementById('mtr-line-label');
+            const staLabel = document.getElementById('mtr-sta-label');
+            if (lineLabel) lineLabel.textContent = userConfig.mtrLine;
+            if (staLabel) staLabel.textContent = userConfig.mtrSta;
             
-            // 更新 MTR 巴士的標題，包含選擇的車站（若有）
             const routeDisplay = userConfig.busRoute + (userConfig.busStopName ? ` (${userConfig.busStopName})` : '');
-            document.getElementById('kmb-route-label').textContent = routeDisplay;
+            const busRouteLabel = document.getElementById('kmb-route-label');
+            if (busRouteLabel) busRouteLabel.textContent = routeDisplay;
             
             // 1. MTR Next Train
             const mtrContainer = document.getElementById('mtr-eta-container');
-            try {
-                const res = await fetch(`https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php?line=${userConfig.mtrLine}&sta=${userConfig.mtrSta}`);
-                const data = await res.json();
-                
-                if (data.status === 1 && data.data && data.data[`${userConfig.mtrLine}-${userConfig.mtrSta}`]) {
-                    const staData = data.data[`${userConfig.mtrLine}-${userConfig.mtrSta}`];
-                    let html = '';
-                    ['UP', 'DOWN'].forEach(dir => {
-                        if (staData[dir] && staData[dir].length > 0) {
-                            const dest = staData[dir][0].dest;
-                            html += `<div class="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/50">
-                                <div class="text-xs text-slate-400 mb-1">往 ${dest}</div>
-                                <div class="flex gap-2 items-baseline">`;
-                            staData[dir].slice(0, 2).forEach((train, idx) => {
-                                const minStr = calcMinsStr(train.time);
-                                html += `<span class="${idx===0 ? 'text-xl font-bold text-white' : 'text-sm text-slate-400'}">${idx>0?', ':''}${minStr}</span>`;
-                            });
-                            html += `</div></div>`;
-                        }
-                    });
-                    mtrContainer.innerHTML = html || '<div class="text-slate-400 text-sm py-2">目前無列車資訊。</div>';
-                } else {
-                    mtrContainer.innerHTML = '<div class="text-slate-400 text-sm py-2">查無該車站數據。</div>';
+            if (mtrContainer) {
+                try {
+                    const res = await fetch(`https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php?line=${userConfig.mtrLine}&sta=${userConfig.mtrSta}`);
+                    const data = await res.json();
+                    
+                    if (data.status === 1 && data.data && data.data[`${userConfig.mtrLine}-${userConfig.mtrSta}`]) {
+                        const staData = data.data[`${userConfig.mtrLine}-${userConfig.mtrSta}`];
+                        let html = '';
+                        ['UP', 'DOWN'].forEach(dir => {
+                            if (staData[dir] && staData[dir].length > 0) {
+                                const dest = staData[dir][0].dest;
+                                html += `<div class="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/50">
+                                    <div class="text-xs text-slate-400 mb-1">往 ${dest}</div>
+                                    <div class="flex gap-2 items-baseline">`;
+                                staData[dir].slice(0, 2).forEach((train, idx) => {
+                                    const minStr = calcMinsStr(train.time);
+                                    html += `<span class="${idx===0 ? 'text-xl font-bold text-white' : 'text-sm text-slate-400'}">${idx>0?', ':''}${minStr}</span>`;
+                                });
+                                html += `</div></div>`;
+                            }
+                        });
+                        mtrContainer.innerHTML = html || '<div class="text-slate-400 text-sm py-2">目前無列車資訊。</div>';
+                    } else {
+                        mtrContainer.innerHTML = '<div class="text-slate-400 text-sm py-2">查無該車站數據。</div>';
+                    }
+                } catch (e) {
+                    mtrContainer.innerHTML = '<div class="text-rose-400 text-sm py-2">讀取錯誤</div>';
                 }
-            } catch (e) {
-                mtrContainer.innerHTML = '<div class="text-rose-400 text-sm py-2">讀取錯誤</div>';
             }
 
             // 2. MTR Bus API
             const busContainer = document.getElementById('kmb-eta-container');
-            try {
-                const busRes = await fetch(`https://rt.data.gov.hk/v1/transport/mtr/bus/getSchedule`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ language: "zh" })
-                });
-                const busData = await busRes.json();
-                
-                if (busData && busData.routeStatusTimeTable) {
-                    const myRouteDirs = busData.routeStatusTimeTable.filter(r => r.routeName === userConfig.busRoute);
-                    if (myRouteDirs.length > 0) {
-                        let html = '';
-                        let foundStop = false;
-                        
-                        myRouteDirs.forEach(routeDir => {
-                            if (routeDir.busStop && routeDir.busStop.length > 0) {
-                                // 如果有設定車站 ID，則尋找該車站；否則預設使用該方向的第一個車站
-                                let targetStop = routeDir.busStop[0];
-                                if (userConfig.busStopId) {
-                                    const matched = routeDir.busStop.find(s => s.busStopId === userConfig.busStopId);
-                                    if (matched) {
-                                        targetStop = matched;
-                                    } else {
-                                        // 該方向沒有此車站 (例如總站或單向站)，跳過此方向
-                                        return; 
-                                    }
-                                }
-                                
-                                foundStop = true;
-                                html += `<div class="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/50 mb-2">
-                                    <div class="text-xs text-slate-400 mb-1 truncate">${targetStop.busStopName}</div>
-                                    <div class="flex gap-2 items-baseline">`;
-                                
-                                if(targetStop.bus && targetStop.bus.length > 0) {
-                                    targetStop.bus.slice(0, 2).forEach((b, idx) => {
-                                        let t = b.departureTimeInText || b.departureTime;
-                                        if(!isNaN(t)) {
-                                            const m = Math.floor(parseInt(t)/60);
-                                            t = m <= 0 ? '即將到站' : `${m} 分鐘`;
+            if (busContainer) {
+                try {
+                    const busRes = await fetch(`https://rt.data.gov.hk/v1/transport/mtr/bus/getSchedule`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ language: "zh" })
+                    });
+                    const busData = await busRes.json();
+                    
+                    if (busData && busData.routeStatusTimeTable) {
+                        const myRouteDirs = busData.routeStatusTimeTable.filter(r => r.routeName === userConfig.busRoute);
+                        if (myRouteDirs.length > 0) {
+                            let html = '';
+                            let foundStop = false;
+                            
+                            myRouteDirs.forEach(routeDir => {
+                                if (routeDir.busStop && routeDir.busStop.length > 0) {
+                                    let targetStop = routeDir.busStop[0];
+                                    if (userConfig.busStopId) {
+                                        const matched = routeDir.busStop.find(s => s.busStopId === userConfig.busStopId);
+                                        if (matched) {
+                                            targetStop = matched;
+                                        } else {
+                                            return; 
                                         }
-                                        html += `<span class="${idx===0 ? 'text-xl font-bold '+(t==='即將到站'?'text-rose-400':'text-amber-400') : 'text-sm text-slate-400'}">${idx>0?', ':''}${t}</span>`;
-                                    });
-                                } else { 
-                                    html += '<span class="text-sm text-slate-500">暫無班次</span>'; 
+                                    }
+                                    
+                                    foundStop = true;
+                                    html += `<div class="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/50 mb-2">
+                                        <div class="text-xs text-slate-400 mb-1 truncate">${targetStop.busStopName}</div>
+                                        <div class="flex gap-2 items-baseline">`;
+                                    
+                                    if(targetStop.bus && targetStop.bus.length > 0) {
+                                        targetStop.bus.slice(0, 2).forEach((b, idx) => {
+                                            let t = b.departureTimeInText || b.departureTime;
+                                            if(!isNaN(t)) {
+                                                const m = Math.floor(parseInt(t)/60);
+                                                t = m <= 0 ? '即將到站' : `${m} 分鐘`;
+                                            }
+                                            html += `<span class="${idx===0 ? 'text-xl font-bold '+(t==='即將到站'?'text-rose-400':'text-amber-400') : 'text-sm text-slate-400'}">${idx>0?', ':''}${t}</span>`;
+                                        });
+                                    } else { 
+                                        html += '<span class="text-sm text-slate-500">暫無班次</span>'; 
+                                    }
+                                    html += `</div></div>`;
                                 }
-                                html += `</div></div>`;
+                            });
+                            
+                            if(!foundStop) {
+                                busContainer.innerHTML = '<div class="text-slate-400 text-sm py-2">該路線目前方向查無所選車站。</div>';
+                            } else {
+                                busContainer.innerHTML = html;
                             }
-                        });
-                        
-                        if(!foundStop) {
-                            busContainer.innerHTML = '<div class="text-slate-400 text-sm py-2">該路線目前方向查無所選車站。</div>';
-                        } else {
-                            busContainer.innerHTML = html;
+                        } else { 
+                            busContainer.innerHTML = '<div class="text-slate-400 text-sm py-2">查無路線。</div>'; 
                         }
-                    } else { 
-                        busContainer.innerHTML = '<div class="text-slate-400 text-sm py-2">查無路線。</div>'; 
                     }
+                } catch (e) {
+                    busContainer.innerHTML = '<div class="text-rose-400 text-sm py-2">讀取錯誤</div>';
                 }
-            } catch (e) {
-                busContainer.innerHTML = '<div class="text-rose-400 text-sm py-2">讀取錯誤</div>';
             }
             
             etaCountdown = 15;
-            document.getElementById('eta-timer').textContent = `${etaCountdown}s 後刷新`;
+            const etaTimer = document.getElementById('eta-timer');
+            if (etaTimer) etaTimer.textContent = `${etaCountdown}s 後刷新`;
         }
         
         function calcMinsStr(timeStr) {
@@ -598,10 +809,11 @@
         async function fetchStockData() {
             const container = document.getElementById('stock-list-container');
             const badge = document.getElementById('stock-source-badge');
+            if (!container) return;
             let html = '';
             
             if (userConfig.finnhubApiKey && userConfig.finnhubApiKey.trim() !== '') {
-                badge.innerHTML = `<i class="fa-solid fa-bolt text-amber-400"></i> Finnhub`;
+                if (badge) badge.innerHTML = `<i class="fa-solid fa-bolt text-amber-400"></i> Finnhub`;
                 for (let sym of userConfig.stocks) {
                     try {
                         const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${userConfig.finnhubApiKey}`);
@@ -613,7 +825,7 @@
                     } catch(e) { html += getStockHTML(sym, 'Error', 0, 0); }
                 }
             } else {
-                badge.innerHTML = `<i class="fa-solid fa-vial text-emerald-400"></i> 模擬`;
+                if (badge) badge.innerHTML = `<i class="fa-solid fa-vial text-emerald-400"></i> 模擬`;
                 const mock = { 'HSI': 17589, '0700.HK': 388.4, '9988.HK': 78.2, 'AAPL': 193.5 };
                 userConfig.stocks.forEach(sym => {
                     const base = mock[sym] || 100;
@@ -623,7 +835,8 @@
             }
             container.innerHTML = html;
             const now = new Date();
-            document.getElementById('stock-last-update').textContent = `更新: ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            const updateEl = document.getElementById('stock-last-update');
+            if (updateEl) updateEl.textContent = `更新: ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         }
 
         function getStockHTML(sym, name, price, pChange) {
@@ -644,6 +857,98 @@
                         </div>
                     </div>
                 </div>`;
+        }
+
+        /* ================== WEATHER & GPS ================== */
+        function getWeatherEmoji(code) {
+            const iconMap = {
+                50: '☀️', 51: '🌤️', 52: '⛅', 53: '🌤️', 54: '☁️',
+                60: '☁️', 61: '☁️', 62: '🌧️', 63: '🌧️', 64: '🌧️', 65: '⛈️'
+            };
+            return iconMap[code] || '🌤️';
+        }
+
+        async function fetchHKOWeather() {
+            try {
+                const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc');
+                const data = await res.json();
+                
+                if(data.temperature && data.temperature.data) {
+                    const locName = gpsLocation.name || '京士柏';
+                    let tempItem = data.temperature.data.find(t => t.place.includes(locName) || locName.includes(t.place));
+                    if(!tempItem) tempItem = data.temperature.data.find(t => t.place === '京士柏' || t.place === '香港天文台') || data.temperature.data[0];
+                    if(tempItem) {
+                        const tempEl = document.getElementById('weather-temp');
+                        if (tempEl) tempEl.textContent = tempItem.value;
+                    }
+                }
+                
+                if(data.humidity && data.humidity.data && data.humidity.data.length > 0) {
+                    const humEl = document.getElementById('weather-humidity');
+                    if (humEl) humEl.textContent = `${data.humidity.data[0].value}%`;
+                }
+                
+                if(data.uvindex && data.uvindex.data && data.uvindex.data.length > 0) {
+                    const uvEl = document.getElementById('weather-uv');
+                    if (uvEl) uvEl.textContent = data.uvindex.data[0].value;
+                } else {
+                    const uvEl = document.getElementById('weather-uv');
+                    if (uvEl) uvEl.textContent = '0';
+                }
+                
+                const warnEl = document.getElementById('weather-warning');
+                if (warnEl) {
+                    if(data.warningMessage && data.warningMessage.length > 0) {
+                        warnEl.textContent = data.warningMessage[0];
+                    } else {
+                        warnEl.textContent = '無警告';
+                    }
+                }
+
+                if(data.icon && data.icon.length > 0) {
+                    const iconEl = document.getElementById('weather-icon-container');
+                    if (iconEl) iconEl.textContent = getWeatherEmoji(data.icon[0]);
+                }
+            } catch(e) {
+                console.error("HKO Weather error:", e);
+            }
+        }
+
+        function requestGPSLocation() {
+            const locEl = document.getElementById('weather-location');
+            if (!navigator.geolocation) {
+                if(locEl) locEl.innerHTML = `<i class="fa-solid fa-location-crosshairs"></i> 京士柏`;
+                fetchHKOWeather();
+                return;
+            }
+            if(locEl) locEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 定位中...`;
+            
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    let closest = weatherStations[0];
+                    let minDistance = Infinity;
+
+                    weatherStations.forEach(st => {
+                        const d = Math.pow(st.lat - lat, 2) + Math.pow(st.lng - lng, 2);
+                        if(d < minDistance) {
+                            minDistance = d;
+                            closest = st;
+                        }
+                    });
+
+                    gpsLocation = closest;
+                    if(locEl) locEl.innerHTML = `<i class="fa-solid fa-location-crosshairs"></i> ${closest.name}`;
+                    fetchHKOWeather();
+                },
+                (err) => {
+                    gpsLocation = { lat: 22.31, lng: 114.17, name: '京士柏' };
+                    if(locEl) locEl.innerHTML = `<i class="fa-solid fa-location-crosshairs"></i> 京士柏`;
+                    fetchHKOWeather();
+                },
+                { timeout: 8000 }
+            );
         }
 
         /* ================== CALENDAR ================== */
@@ -686,6 +991,8 @@
 
         function renderEvents() {
             const list = document.getElementById('event-list');
+            if (!list) return;
+            
             let combined = [...eventsList];
             const today = new Date(); today.setHours(0,0,0,0);
             const tmw = new Date(today); tmw.setDate(tmw.getDate()+1);
@@ -732,73 +1039,82 @@
                     </div>`;
                 }).join('');
             }
-            document.getElementById('event-count-badge').innerHTML = `<i class="fa-brands fa-google"></i> ${gCalEvents.length} | 本地 ${eventsList.length}`;
+            
+            const badge = document.getElementById('event-count-badge');
+            if (badge) {
+                badge.innerHTML = `<i class="fa-brands fa-google"></i> ${gCalEvents.length} | 本地 ${eventsList.length}`;
+            }
         }
 
         function handleAddEvent(e) {
             e.preventDefault();
+            const colorRadio = document.querySelector('input[name="event-color"]:checked');
             eventsList.push({
                 id: 'ev-'+Date.now(),
-                title: document.getElementById('event-title').value,
-                day: document.getElementById('event-day-type').value,
-                time: document.getElementById('event-time').value,
-                color: document.querySelector('input[name="event-color"]:checked').value
+                title: getInputValue('event-title'),
+                day: getInputValue('event-day-type'),
+                time: getInputValue('event-time'),
+                color: colorRadio ? colorRadio.value : 'blue'
             });
             localStorage.setItem('dashboardEvents', JSON.stringify(eventsList));
-            renderEvents(); closeAddEventModal(); document.getElementById('add-event-form').reset();
+            renderEvents(); 
+            closeAddEventModal(); 
+            const form = document.getElementById('add-event-form');
+            if (form) form.reset();
+            syncToCloud();
         }
+
         function deleteEvent(id) {
             eventsList = eventsList.filter(e => e.id !== id);
             localStorage.setItem('dashboardEvents', JSON.stringify(eventsList));
             renderEvents();
+            syncToCloud();
         }
 
         /* ================== APP FLOW & MODALS ================== */
-        function loadSettings() {
-            const s = localStorage.getItem('dashCfg');
-            if(s) userConfig = {...userConfig, ...JSON.parse(s)};
-            const evs = localStorage.getItem('dashboardEvents');
-            if(evs) eventsList = JSON.parse(evs);
-
-            document.getElementById('setting-finnhub-key').value = userConfig.finnhubApiKey;
-            document.getElementById('setting-ical-url').value = userConfig.icalUrl;
-            document.getElementById('setting-stocks').value = userConfig.stocks.join(', ');
-            document.getElementById('setting-bus-route').value = userConfig.busRoute;
-            document.getElementById('setting-mtr-line').value = userConfig.mtrLine;
-            
-            // 載入時同步初始化鐵路車站下拉選單
-            updateStationOptions(userConfig.mtrLine, userConfig.mtrSta);
-            
-            // 載入時同步初始化巴士車站選單
-            const busStopSelect = document.getElementById('setting-bus-stop');
-            if (userConfig.busStopId) {
-                busStopSelect.innerHTML = `<option value="${userConfig.busStopId}">${userConfig.busStopName || '已選擇車站'}</option>`;
-            } else {
-                busStopSelect.innerHTML = '<option value="">預設首站 (請搜尋以選擇)</option>';
-            }
+        function openSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            if (modal) modal.classList.remove('hidden');
         }
 
-        // 動態更新鐵路車站選項
+        function closeSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            if (modal) modal.classList.add('hidden');
+            const qrWrapper = document.getElementById('qrcode-wrapper');
+            if (qrWrapper) qrWrapper.classList.add('hidden');
+        }
+
+        function openAddEventModal() {
+            const modal = document.getElementById('add-event-modal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeAddEventModal() {
+            const modal = document.getElementById('add-event-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
         function updateStationOptions(lineCode, selectedSta = null) {
             const staSelect = document.getElementById('setting-mtr-sta');
-            staSelect.innerHTML = ''; // 清空現有選項
+            if (!staSelect) return;
+            staSelect.innerHTML = '';
             
             const stations = mtrStationsMap[lineCode] || [];
             stations.forEach(sta => {
                 const opt = document.createElement('option');
                 opt.value = sta.c;
                 opt.textContent = `${sta.n} (${sta.c})`;
-                if (selectedSta === sta.c) opt.selected = true; // 如果與儲存的設定相同則設為預設
+                if (selectedSta === sta.c) opt.selected = true;
                 staSelect.appendChild(opt);
             });
         }
         
-        // 搜尋 MTR 巴士路線並獲取車站列表
         async function fetchBusStops(route) {
             route = route.trim().toUpperCase();
             if(!route) return;
             
             const stopSelect = document.getElementById('setting-bus-stop');
+            if (!stopSelect) return;
             stopSelect.innerHTML = '<option value="">搜尋中...</option>';
             
             try {
@@ -819,12 +1135,10 @@
                     }
                     
                     let hasStops = false;
-                    // 將同路線不同方向的車站分組顯示 (optgroup)
                     myRouteDirs.forEach((dir, dirIdx) => {
                         if (dir.busStop && dir.busStop.length > 0) {
                             hasStops = true;
                             const group = document.createElement('optgroup');
-                            // 若有終點站資訊則顯示，否則顯示方向1、方向2
                             const destName = dir.busStop[dir.busStop.length - 1].busStopName;
                             group.label = `往 ${destName} (方向 ${dirIdx + 1})`;
                             
@@ -832,7 +1146,6 @@
                                 const opt = document.createElement('option');
                                 opt.value = stop.busStopId;
                                 opt.textContent = stop.busStopName;
-                                // 判斷是否為目前選擇的車站
                                 if (userConfig.busStopId === stop.busStopId) opt.selected = true;
                                 group.appendChild(opt);
                             });
@@ -843,7 +1156,6 @@
                     if(!hasStops) {
                         stopSelect.innerHTML = '<option value="">無車站資料</option>';
                     } else {
-                        // 確保如果沒有匹配的 selected，最少預設為第一個或一個空選項
                         const emptyOpt = document.createElement('option');
                         emptyOpt.value = "";
                         emptyOpt.textContent = "== 請選擇特定車站 ==";
@@ -856,16 +1168,62 @@
             }
         }
 
-        function saveSettings() {
-            userConfig.finnhubApiKey = document.getElementById('setting-finnhub-key').value.trim();
-            userConfig.icalUrl = document.getElementById('setting-ical-url').value.trim();
-            userConfig.stocks = document.getElementById('setting-stocks').value.split(',').map(s=>s.trim()).filter(s=>s);
-            userConfig.mtrLine = document.getElementById('setting-mtr-line').value;
-            userConfig.mtrSta = document.getElementById('setting-mtr-sta').value.trim().toUpperCase();
+        function loadSettings() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlSyncId = urlParams.get('sync');
+
+            const s = localStorage.getItem('dashCfg');
+            if(s) {
+                try { userConfig = {...userConfig, ...JSON.parse(s)}; } catch(e){}
+            }
+            const evs = localStorage.getItem('dashboardEvents');
+            if(evs) {
+                try { eventsList = JSON.parse(evs); } catch(e){}
+            }
+
+            if (urlSyncId) {
+                userConfig.syncId = urlSyncId.trim().toUpperCase();
+                localStorage.setItem('dashCfg', JSON.stringify(userConfig));
+            }
+
+            setInputValue('setting-sync-id', userConfig.syncId);
+            setInputValue('setting-finnhub-key', userConfig.finnhubApiKey);
+            setInputValue('setting-ical-url', userConfig.icalUrl);
+            setInputValue('setting-stocks', userConfig.stocks ? userConfig.stocks.join(', ') : '');
+            setInputValue('setting-bus-route', userConfig.busRoute);
+            setInputValue('setting-mtr-line', userConfig.mtrLine);
             
-            userConfig.busRoute = document.getElementById('setting-bus-route').value.trim().toUpperCase();
+            updateStationOptions(userConfig.mtrLine, userConfig.mtrSta);
+            
             const busStopSelect = document.getElementById('setting-bus-stop');
-            if(busStopSelect.value && busStopSelect.options.length > 0) {
+            if (busStopSelect) {
+                if (userConfig.busStopId) {
+                    busStopSelect.innerHTML = `<option value="${userConfig.busStopId}">${userConfig.busStopName || '已選擇車站'}</option>`;
+                } else {
+                    busStopSelect.innerHTML = '<option value="">預設首站 (請先搜尋)</option>';
+                }
+            }
+
+            if (userConfig.syncId) {
+                setupCloudListener();
+            }
+        }
+
+        function saveSettings() {
+            const oldSyncId = userConfig.syncId;
+            userConfig.syncId = getInputValue('setting-sync-id').toUpperCase();
+            userConfig.finnhubApiKey = getInputValue('setting-finnhub-key');
+            userConfig.icalUrl = getInputValue('setting-ical-url');
+            
+            const stocksVal = getInputValue('setting-stocks');
+            userConfig.stocks = stocksVal ? stocksVal.split(',').map(s=>s.trim()).filter(s=>s) : [];
+            
+            userConfig.mtrLine = getInputValue('setting-mtr-line') || 'TWL';
+            userConfig.mtrSta = getInputValue('setting-mtr-sta').toUpperCase() || 'CEN';
+            
+            userConfig.busRoute = getInputValue('setting-bus-route').toUpperCase() || 'K65';
+            const busStopSelect = document.getElementById('setting-bus-stop');
+            if(busStopSelect && busStopSelect.value && busStopSelect.options.length > 0) {
                 userConfig.busStopId = busStopSelect.value;
                 userConfig.busStopName = busStopSelect.options[busStopSelect.selectedIndex].text;
             } else {
@@ -874,22 +1232,28 @@
             }
             
             localStorage.setItem('dashCfg', JSON.stringify(userConfig));
-            closeSettingsModal(); fetchAllData();
-        }
+            closeSettingsModal(); 
 
-        function openSettingsModal() { loadSettings(); document.getElementById('settings-modal').classList.remove('hidden'); }
-        function closeSettingsModal() { document.getElementById('settings-modal').classList.add('hidden'); }
-        function openAddEventModal() { document.getElementById('event-modal').classList.remove('hidden'); }
-        function closeAddEventModal() { document.getElementById('event-modal').classList.add('hidden'); }
-
-        function toggleFullScreen() {
-            if(!document.fullscreenElement) document.documentElement.requestFullscreen().catch(e=>{});
-            else if(document.exitFullscreen) document.exitFullscreen();
+            if (userConfig.syncId !== oldSyncId) {
+                setupCloudListener();
+            }
+            
+            syncToCloud();
+            fetchAllData();
         }
 
         function fetchAllData() {
-            fetchHKOWeather(); fetchTransportETA(); fetchStockData(); fetchGoogleCalendar();
+            fetchStockData();
+            fetchTransportETA();
+            fetchGoogleCalendar();
+            fetchHKOWeather();
         }
+
+        window.onCloudReady = () => {
+            if (userConfig.syncId) {
+                setupCloudListener();
+            }
+        };
 
         window.onload = () => {
             loadSettings();
@@ -902,7 +1266,10 @@
             setInterval(() => {
                 etaCountdown--;
                 if(etaCountdown <= 0) fetchTransportETA();
-                else document.getElementById('eta-timer').textContent = `${etaCountdown}s 後刷新`;
+                else {
+                    const timerEl = document.getElementById('eta-timer');
+                    if (timerEl) timerEl.textContent = `${etaCountdown}s 後刷新`;
+                }
             }, 1000);
             setInterval(fetchGoogleCalendar, 900000); // 15m
         };
