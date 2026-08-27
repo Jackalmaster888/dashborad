@@ -812,17 +812,53 @@
             if (!container) return;
             let html = '';
             
+            if (userConfig.stocks.length === 0) {
+                if (badge) badge.innerHTML = `<i class="fa-solid fa-circle-info text-slate-400"></i> 未設定`;
+                container.innerHTML = '<div class="text-center py-8 text-slate-500 text-sm">請於設定中加入追蹤的股票。</div>';
+                updateStockTime();
+                return;
+            }
+
             if (userConfig.finnhubApiKey && userConfig.finnhubApiKey.trim() !== '') {
                 if (badge) badge.innerHTML = `<i class="fa-solid fa-bolt text-amber-400"></i> Finnhub`;
+                let hasError = false;
                 for (let sym of userConfig.stocks) {
                     try {
                         const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${userConfig.finnhubApiKey}`);
+                        if (!res.ok) {
+                            if (res.status === 401) {
+                                throw new Error('API Key 無效或已過期');
+                            } else if (res.status === 429) {
+                                throw new Error('API 請求次數超過限制');
+                            } else {
+                                throw new Error('API 請求失敗');
+                            }
+                        }
                         const data = await res.json();
-                        if (data && data.c) {
+                        // Finnhub return 0 for non-existent symbols sometimes, or just empty objects.
+                        if (data && data.c !== undefined && data.c !== null && data.c !== 0) {
                             const pChange = data.pc !== 0 ? ((data.c - data.pc) / data.pc) * 100 : 0;
                             html += getStockHTML(sym, sym, data.c, pChange);
+                        } else {
+                            html += getStockHTML(sym, '查無資料', 0, 0, true);
                         }
-                    } catch(e) { html += getStockHTML(sym, 'Error', 0, 0); }
+                    } catch(e) { 
+                        console.error(`Error fetching stock ${sym}:`, e);
+                        hasError = true;
+                        if (e.message.includes('API Key')) {
+                            html = `<div class="text-center py-8 text-rose-400 text-sm"><i class="fa-solid fa-circle-exclamation mr-1"></i>Finnhub API Key 無效。<br>請至設定檢查。</div>`;
+                            break; // Stop fetching others if API key is invalid
+                        } else if (e.message.includes('限制')) {
+                            html = `<div class="text-center py-8 text-amber-400 text-sm"><i class="fa-solid fa-triangle-exclamation mr-1"></i>API 請求過於頻繁，<br>請稍後再試。</div>`;
+                            break;
+                        } else {
+                            html += getStockHTML(sym, '載入失敗', 0, 0, true); 
+                        }
+                    }
+                }
+                
+                if (html === '') {
+                     html = '<div class="text-center py-8 text-slate-500 text-sm">未能載入任何股票資料。</div>';
                 }
             } else {
                 if (badge) badge.innerHTML = `<i class="fa-solid fa-vial text-emerald-400"></i> 模擬`;
@@ -834,12 +870,29 @@
                 });
             }
             container.innerHTML = html;
+            updateStockTime();
+        }
+
+        function updateStockTime() {
             const now = new Date();
             const updateEl = document.getElementById('stock-last-update');
             if (updateEl) updateEl.textContent = `更新: ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         }
 
-        function getStockHTML(sym, name, price, pChange) {
+        function getStockHTML(sym, name, price, pChange, isError = false) {
+            if (isError) {
+                return `
+                <div class="p-2.5 rounded-xl border bg-slate-900/40 border-slate-700/50 flex justify-between items-center shadow-inner opacity-60">
+                    <div>
+                        <div class="font-bold text-slate-400 text-sm">${sym}</div>
+                        <div class="text-[10px] text-slate-500">${name}</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-mono text-sm text-slate-500">--</div>
+                    </div>
+                </div>`;
+            }
+
             const isUp = pChange >= 0;
             const color = isUp ? 'text-emerald-400' : 'text-rose-400';
             const bg = isUp ? 'bg-emerald-900/20 border-emerald-800/30' : 'bg-rose-900/20 border-rose-800/30';
