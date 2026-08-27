@@ -806,69 +806,118 @@
         }
 
         /* ================== STOCKS ================== */
+        async function fetchStockQuote(rawSym) {
+            let sym = rawSym.trim().toUpperCase();
+            if (!sym) return null;
+
+            // 港股代號自動補零格式化 (例: 700.HK -> 0700.HK)
+            if (/^\d{1,3}\.HK$/.test(sym)) {
+                const parts = sym.split('.');
+                sym = parts[0].padStart(4, '0') + '.HK';
+            }
+
+            // 1. 優先使用 Finnhub API (轉大寫後查詢)
+            if (userConfig.finnhubApiKey && userConfig.finnhubApiKey.trim() !== '') {
+                try {
+                    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${userConfig.finnhubApiKey.trim()}`);
+                    if (res.status === 401) throw new Error('API Key 無效');
+                    if (res.status === 429) throw new Error('API 請求頻率過高');
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data && data.c && data.c > 0) {
+                            const pChange = data.pc ? ((data.c - data.pc) / data.pc) * 100 : 0;
+                            return { sym, name: sym, price: data.c, change: pChange, source: 'Finnhub' };
+                        }
+                    }
+                } catch (e) {
+                    if (e.message.includes('API Key') || e.message.includes('頻率過高')) {
+                        throw e;
+                    }
+                }
+            }
+
+            // 2. 備援來源：Yahoo Finance API (支援港股 0700.HK、恆指 HSI/^HSI 及美股)
+            try {
+                let ySym = sym;
+                if (ySym === 'HSI') ySym = '^HSI';
+                
+                const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d`;
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+                const res = await fetch(proxyUrl);
+                if (res.ok) {
+                    const wrapper = await res.json();
+                    if (wrapper.contents) {
+                        const yData = JSON.parse(wrapper.contents);
+                        const result = yData?.chart?.result?.[0];
+                        if (result && result.meta) {
+                            const meta = result.meta;
+                            const price = meta.regularMarketPrice;
+                            const prevClose = meta.chartPreviousClose || meta.previousClose;
+                            if (price) {
+                                const pChange = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
+                                const shortName = meta.shortName || meta.symbol || sym;
+                                return { sym, name: shortName, price, change: pChange, source: 'Yahoo' };
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn(`Yahoo 備援讀取失敗 (${sym}):`, e);
+            }
+
+            return null;
+        }
+
         async function fetchStockData() {
             const container = document.getElementById('stock-list-container');
             const badge = document.getElementById('stock-source-badge');
             if (!container) return;
             let html = '';
             
-            if (userConfig.stocks.length === 0) {
+            if (!userConfig.stocks || userConfig.stocks.length === 0) {
                 if (badge) badge.innerHTML = `<i class="fa-solid fa-circle-info text-slate-400"></i> 未設定`;
                 container.innerHTML = '<div class="text-center py-8 text-slate-500 text-sm">請於設定中加入追蹤的股票。</div>';
                 updateStockTime();
                 return;
             }
 
-            if (userConfig.finnhubApiKey && userConfig.finnhubApiKey.trim() !== '') {
-                if (badge) badge.innerHTML = `<i class="fa-solid fa-bolt text-amber-400"></i> Finnhub`;
-                let hasError = false;
-                for (let sym of userConfig.stocks) {
-                    try {
-                        const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${userConfig.finnhubApiKey}`);
-                        if (!res.ok) {
-                            if (res.status === 401) {
-                                throw new Error('API Key 無效或已過期');
-                            } else if (res.status === 429) {
-                                throw new Error('API 請求次數超過限制');
-                            } else {
-                                throw new Error('API 請求失敗');
-                            }
-                        }
-                        const data = await res.json();
-                        // Finnhub return 0 for non-existent symbols sometimes, or just empty objects.
-                        if (data && data.c !== undefined && data.c !== null && data.c !== 0) {
-                            const pChange = data.pc !== 0 ? ((data.c - data.pc) / data.pc) * 100 : 0;
-                            html += getStockHTML(sym, sym, data.c, pChange);
-                        } else {
-                            html += getStockHTML(sym, '查無資料', 0, 0, true);
-                        }
-                    } catch(e) { 
-                        console.error(`Error fetching stock ${sym}:`, e);
-                        hasError = true;
-                        if (e.message.includes('API Key')) {
-                            html = `<div class="text-center py-8 text-rose-400 text-sm"><i class="fa-solid fa-circle-exclamation mr-1"></i>Finnhub API Key 無效。<br>請至設定檢查。</div>`;
-                            break; // Stop fetching others if API key is invalid
-                        } else if (e.message.includes('限制')) {
-                            html = `<div class="text-center py-8 text-amber-400 text-sm"><i class="fa-solid fa-triangle-exclamation mr-1"></i>API 請求過於頻繁，<br>請稍後再試。</div>`;
-                            break;
-                        } else {
-                            html += getStockHTML(sym, '載入失敗', 0, 0, true); 
-                        }
+            const hasKey = userConfig.finnhubApiKey && userConfig.finnhubApiKey.trim() !== '';
+            if (badge) {
+                badge.innerHTML = hasKey 
+                    ? `<i class="fa-solid fa-bolt text-amber-400"></i> Finnhub / Auto` 
+                    : `<i class="fa-solid fa-globe text-sky-400"></i> Yahoo 備援`;
+            }
+
+            let hasApiKeyError = false;
+
+            for (let rawSym of userConfig.stocks) {
+                if (!rawSym || !rawSym.trim()) continue;
+                const cleanSym = rawSym.trim().toUpperCase();
+                try {
+                    const quote = await fetchStockQuote(rawSym);
+                    if (quote) {
+                        html += getStockHTML(quote.sym, quote.name, quote.price, quote.change);
+                    } else {
+                        html += getStockHTML(cleanSym, '查無資料', 0, 0, true);
+                    }
+                } catch (e) {
+                    if (e.message.includes('API Key')) {
+                        hasApiKeyError = true;
+                        html = `<div class="text-center py-8 text-rose-400 text-sm"><i class="fa-solid fa-circle-exclamation mr-1"></i>Finnhub API Key 無效。<br>請至設定檢查。</div>`;
+                        break;
+                    } else if (e.message.includes('頻率過高')) {
+                        html = `<div class="text-center py-8 text-amber-400 text-sm"><i class="fa-solid fa-triangle-exclamation mr-1"></i>API 請求過於頻繁，<br>請稍後再試。</div>`;
+                        break;
+                    } else {
+                        html += getStockHTML(cleanSym, '載入失敗', 0, 0, true);
                     }
                 }
-                
-                if (html === '') {
-                     html = '<div class="text-center py-8 text-slate-500 text-sm">未能載入任何股票資料。</div>';
-                }
-            } else {
-                if (badge) badge.innerHTML = `<i class="fa-solid fa-vial text-emerald-400"></i> 模擬`;
-                const mock = { 'HSI': 17589, '0700.HK': 388.4, '9988.HK': 78.2, 'AAPL': 193.5 };
-                userConfig.stocks.forEach(sym => {
-                    const base = mock[sym] || 100;
-                    const change = (Math.random() - 0.5) * 2;
-                    html += getStockHTML(sym, sym, base + change, change);
-                });
             }
+
+            if (html === '' && !hasApiKeyError) {
+                html = '<div class="text-center py-8 text-slate-500 text-sm">未能載入任何股票資料。</div>';
+            }
+
             container.innerHTML = html;
             updateStockTime();
         }
