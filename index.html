@@ -1,524 +1,1466 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-HK">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>個人資訊儀表板</title>
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- QRCode.js for generating pairing QR code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
     <style>
         body {
-            background-color: #0f172a;
-            color: #f8fafc;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #f8fafc; /* Slate 50 */
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
-        .card {
-            background-color: rgba(30, 41, 59, 0.7);
+        
+        /* 隱藏滾動條但保留滾動功能 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        
+        /* 網格卡片樣式 - 霓虹邊框與磨砂玻璃效果 */
+        .grid-card {
+            background: rgba(30, 41, 59, 0.75); /* Slate 800 with opacity */
             backdrop-filter: blur(12px);
-            border: 1px solid rgba(51, 65, 85, 0.8);
-            border-radius: 1.25rem;
+            border: 2px solid #2563eb; /* Vibrant Blue border */
+            border-radius: 1.5rem;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+            overflow: hidden;
         }
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
+        
+        .grid-card:hover {
+            border-color: #3b82f6; 
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.25);
         }
-        ::-webkit-scrollbar-track {
-            background: rgba(15, 23, 42, 0.6);
+
+        .card-header {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #f8fafc; 
+            margin-bottom: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.5);
+            padding-bottom: 0.65rem;
+            shrink: 0;
         }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(51, 65, 85, 0.8);
-            border-radius: 3px;
-        }
+
+        .modal-backdrop { backdrop-filter: blur(6px); }
     </style>
 </head>
-<body class="p-4 md:p-6 min-h-screen flex flex-col justify-between">
+<body class="p-4 md:p-6 lg:p-8">
 
-    <!-- Top Action Bar -->
-    <div class="flex justify-between items-center mb-4">
-        <div class="flex items-center gap-2">
-            <i data-lucide="layout-dashboard" class="text-blue-400 w-6 h-6"></i>
-            <h1 class="text-xl font-bold tracking-wide">個人資訊儀表板</h1>
+    <!-- 頂部導航 / 控制列 -->
+    <header class="flex justify-between items-center mb-5 px-2 shrink-0">
+        <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
+            <i class="fa-solid fa-table-cells-large text-blue-500"></i> 個人資訊看板
+        </h1>
+        <div class="flex items-center gap-3">
+            <!-- 雲端同步狀態標籤 -->
+            <div id="cloud-sync-status" class="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-400" title="雲端同步狀態">
+                <span class="w-2 h-2 rounded-full bg-slate-500 transition-colors" id="sync-dot"></span>
+                <span id="sync-status-text">本機模式</span>
+            </div>
+            
+            <button onclick="fetchAllData()" class="p-2.5 rounded-full bg-slate-800 hover:bg-blue-600 border border-slate-700 transition-colors text-slate-300 hover:text-white group" title="手動重新整理">
+                <i class="fa-solid fa-rotate-right group-active:animate-spin" id="global-refresh-icon"></i>
+            </button>
+            <button onclick="toggleFullScreen()" class="p-2.5 rounded-full bg-slate-800 hover:bg-blue-600 border border-slate-700 transition-colors text-slate-300 hover:text-white" title="全螢幕模式">
+                <i class="fa-solid fa-expand"></i>
+            </button>
+            <button onclick="openSettingsModal()" class="p-2.5 rounded-full bg-slate-800 hover:bg-blue-600 border border-slate-700 transition-colors text-slate-300 hover:text-white flex items-center gap-2" title="設定">
+                <i class="fa-solid fa-gear"></i> <span class="hidden sm:inline text-sm font-medium">系統設定</span>
+            </button>
         </div>
-        <button onclick="openSettingsModal()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-sm transition">
-            <i data-lucide="settings" class="w-4 h-4"></i>
-            <span>設定</span>
-        </button>
-    </div>
+    </header>
 
-    <!-- Main Grid Container -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
+    <!-- 主要網格佈局 -->
+    <main class="flex-grow flex flex-col gap-5">
         
-        <!-- Row 1, Col 1: 時間 -->
-        <div class="card p-5 flex flex-col justify-between relative overflow-hidden min-h-[180px]">
-            <div class="flex justify-between items-start text-slate-400">
-                <span class="text-sm font-medium flex items-center gap-1.5"><i data-lucide="clock" class="w-4 h-4 text-blue-400"></i>時間</span>
-                <span id="date-display" class="text-xs bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700">--/--/--</span>
-            </div>
-            <div class="my-auto py-2">
-                <div id="time-display" class="text-4xl lg:text-5xl font-black tracking-tight font-mono text-center text-white">00:00:00</div>
-            </div>
-            <div id="weekday-display" class="text-right text-xs text-slate-400 font-medium">--</div>
-        </div>
-
-        <!-- Row 1, Col 2: 鐵路到站時間 -->
-        <div class="card p-5 flex flex-col justify-between min-h-[180px]">
-            <div class="flex justify-between items-center mb-2">
-                <span class="text-sm font-medium flex items-center gap-1.5"><i data-lucide="train" class="w-4 h-4 text-emerald-400"></i>鐵路到站時間</span>
-                <span id="train-timer" class="text-xs text-slate-400">30s 後刷新</span>
-            </div>
-            <div id="train-container" class="flex-1 overflow-y-auto space-y-2 pr-1">
-                <div class="text-slate-400 text-sm text-center py-4">載入中...</div>
-            </div>
-        </div>
-
-        <!-- Row 1, Col 3: 最新足球比賽比分 -->
-        <div class="card p-5 flex flex-col justify-between min-h-[180px]">
-            <div class="flex justify-between items-center mb-2">
-                <span class="text-sm font-medium flex items-center gap-1.5"><i data-lucide="trophy" class="w-4 h-4 text-amber-400"></i>最新足球比賽比分</span>
-                <span class="text-xs text-amber-400/80 bg-amber-950/50 px-2 py-0.5 rounded border border-amber-800/50">RapidAPI</span>
-            </div>
-            <div id="football-list-container" class="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[160px]">
-                <div class="text-slate-400 text-sm text-center py-4">載入中...</div>
-            </div>
-        </div>
-
-        <!-- Row 2, Col 1: 股票資訊 -->
-        <div class="card p-5 flex flex-col justify-between min-h-[220px]">
-            <div class="flex justify-between items-center mb-3">
-                <span class="text-sm font-medium flex items-center gap-1.5"><i data-lucide="trending-up" class="w-4 h-4 text-purple-400"></i>股票資訊</span>
-                <span id="stock-source-badge" class="text-xs text-slate-400">載入中...</span>
-            </div>
-            <div id="stock-list-container" class="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[180px]">
-                <div class="text-slate-400 text-sm text-center py-4">載入中...</div>
-            </div>
-        </div>
-
-        <!-- Row 2, Col 2-3: 即時新聞 (跨欄) -->
-        <div class="card p-5 md:col-span-2 flex flex-col justify-between min-h-[220px]">
-            <div class="flex justify-between items-center mb-3">
-                <span class="text-sm font-medium flex items-center gap-1.5"><i data-lucide="newspaper" class="w-4 h-4 text-sky-400"></i>即時新聞</span>
-                <span class="text-xs text-slate-400">香港天文台/即時廣播</span>
-            </div>
-            <div id="news-container" class="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[180px]">
-                <div class="text-slate-400 text-sm text-center py-4">載入新聞數據中...</div>
-            </div>
-        </div>
-
-        <!-- Row 3, Col 1-3: 天氣資訊 (底欄全寬) -->
-        <div class="card p-5 md:col-span-3 min-h-[120px]">
-            <div class="flex justify-between items-center mb-2">
-                <span class="text-sm font-medium flex items-center gap-1.5"><i data-lucide="cloud-sun" class="w-4 h-4 text-amber-300"></i>天氣資訊</span>
-                <span id="weather-location" class="text-xs text-slate-400">定位中...</span>
-            </div>
-            <div id="weather-container" class="flex flex-wrap items-center justify-between gap-4">
-                <div class="text-slate-400 text-sm py-2">獲取即時天氣資訊中...</div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Settings Modal -->
-    <div id="settings-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden">
-            <div class="p-4 border-b border-slate-800 flex justify-between items-center">
-                <h3 class="font-bold text-lg text-white">API 與偏好設定</h3>
-                <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-            <div class="p-4 overflow-y-auto space-y-4 text-sm">
-                <!-- Finnhub Key -->
-                <div>
-                    <label class="block text-slate-300 font-medium mb-1">Finnhub API Key</label>
-                    <input type="text" id="setting-finnhub-key" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:border-blue-500">
-                </div>
-                <!-- Stocks List -->
-                <div>
-                    <label class="block text-slate-300 font-medium mb-1">追蹤股票清單 (以逗號隔開)</label>
-                    <input type="text" id="setting-stocks" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:border-blue-500" placeholder="0700.HK, AAPL, NVDA, MU, VTI">
-                </div>
-                <!-- MTR Line / Station -->
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="block text-slate-300 font-medium mb-1">港鐵路線</label>
-                        <select id="setting-mtr-line" onchange="updateMtrStations()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:border-blue-500">
-                            <option value="TML">屯馬綫 (TML)</option>
-                            <option value="TWL">荃灣綫 (TWL)</option>
-                            <option value="ISL">港島綫 (ISL)</option>
-                            <option value="KTL">觀塘綫 (KTL)</option>
-                            <option value="EAL">東鐵綫 (EAL)</option>
-                            <option value="TCL">東涌綫 (TCL)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-slate-300 font-medium mb-1">港鐵車站</label>
-                        <select id="setting-mtr-sta" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:border-blue-500"></select>
+        <!-- 上方 2 欄區域 (時間 | 鐵路到站) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            
+            <!-- 1. 時間與日期 -->
+            <section class="grid-card justify-center items-center relative min-h-[240px] group">
+                <div class="absolute -right-10 -top-10 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all"></div>
+                <div class="text-center z-10 w-full">
+                    <div id="clock-date" class="text-lg font-medium text-blue-300 mb-1 tracking-wide">載入中...</div>
+                    <div id="clock-time" class="text-6xl lg:text-7xl font-bold text-white tracking-tighter drop-shadow-lg tabular-nums">--:--</div>
+                    <div class="flex justify-center mt-3 gap-2 text-xs text-slate-400 font-mono">
+                        <span class="bg-slate-900/60 px-2.5 py-1 rounded-md border border-slate-700/50">HKT (UTC+8)</span>
+                        <span id="clock-sec" class="bg-slate-900/60 px-2.5 py-1 rounded-md border border-slate-700/50 w-9 font-bold text-blue-400">--</span>
                     </div>
                 </div>
-                <!-- Football RapidAPI Key -->
-                <div>
-                    <label class="block text-slate-300 font-medium mb-1">RapidAPI Key (足球比分)</label>
-                    <input type="text" id="setting-rapidapi-key" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:border-blue-500">
+            </section>
+
+            <!-- 2. 鐵路到站時間 -->
+            <section class="grid-card min-h-[240px] h-[260px]">
+                <div class="card-header justify-between">
+                    <div class="flex items-center gap-2"><i class="fa-solid fa-train text-amber-400"></i> 鐵路到站時間</div>
+                    <span id="eta-timer" class="text-[10px] font-mono px-2 py-0.5 bg-slate-900 rounded text-slate-400 border border-slate-700">15s 後刷新</span>
                 </div>
-            </div>
-            <div class="p-4 border-t border-slate-800 flex justify-end gap-2 bg-slate-900/50">
-                <button onclick="closeSettingsModal()" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">取消</button>
-                <button onclick="saveSettings()" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium">儲存設定</button>
-            </div>
+                
+                <div class="bg-slate-900/50 rounded-xl border border-slate-700/60 p-3 flex-grow flex flex-col justify-between overflow-y-auto">
+                    <div class="text-xs font-bold text-blue-300 mb-2 flex justify-between items-center">
+                        <span><i class="fa-solid fa-location-dot text-rose-400 mr-1"></i> <span id="mtr-line-label">--</span> 綫 - <span id="mtr-sta-label">--</span> 站</span>
+                        <button onclick="fetchTransportETA()" class="hover:text-white text-slate-400 transition-colors" title="更新港鐵"><i class="fa-solid fa-rotate"></i></button>
+                    </div>
+                    
+                    <div id="mtr-eta-container" class="flex flex-col gap-2 my-auto">
+                        <div class="text-center py-4 text-slate-500 text-sm"><i class="fa-solid fa-spinner fa-spin mr-2"></i>載入港鐵數據中...</div>
+                    </div>
+                </div>
+            </section>
+
         </div>
-    </div>
 
-    <script>
-        // MTR station mapping
-        const mtrStationsMap = {
-            'TML': [{code:'TIS', name:'天水圍'}, {code:'ETS', name:'尖東'}, {code:'DIH', name:'鑽石山'}, {code:'TAW', name:'大圍'}, {code:'MOS', name:'馬鞍山'}, {code:'TUM', name:'屯門'}],
-            'TWL': [{code:'CEN', name:'中環'}, {code:'ADM', name:'金鐘'}, {code:'TST', name:'尖沙咀'}, {code:'MOK', name:'旺角'}, {code:'TWE', name:'荃灣'}],
-            'ISL': [{code:'HOK', name:'香港'}, {code:'CEN', name:'中環'}, {code:'CAUSEWAY', name:'銅鑼灣'}, {code:'QUB', name:'鰂魚涌'}, {code:'CHW', name:'柴灣'}],
-            'KTL': [{code:'WHA', name:'黃埔'}, {code:'MOK', name:'旺角'}, {code:'DIH', name:'鑽石山'}, {code:'KOB', name:'九龍灣'}, {code:'TIK', name:'調景嶺'}],
-            'EAL': [{code:'ADM', name:'金鐘'}, {code:'EXC', name:'會展'}, {code:'TAW', name:'大圍'}, {code:'SHT', name:'沙田'}, {code:'LOW', name:'羅湖'}, {code:'LBM', name:'落馬洲'}],
-            'TCL': [{code:'HOK', name:'香港'}, {code:'KOW', name:'九龍'}, {code:'TSY', name:'青衣'}, {code:'TAW', name:'東涌'}]
-        };
+        <!-- 中間區域 (股票資訊 | 足球比分 | 即時新聞) -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            
+            <!-- 股票資訊 -->
+            <section class="grid-card min-h-[300px] flex flex-col">
+                <div class="card-header justify-between">
+                    <div class="flex items-center gap-2"><i class="fa-solid fa-chart-line text-emerald-400"></i> 股票資訊</div>
+                    <span id="stock-source-badge" class="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400 flex items-center gap-1"></span>
+                </div>
+                
+                <div id="stock-list-container" class="flex flex-col gap-2.5 overflow-y-auto pr-1 flex-grow max-h-[320px]">
+                    <div class="text-center py-8 text-slate-500 text-sm"><i class="fa-solid fa-spinner fa-spin mr-2"></i>載入股票中...</div>
+                </div>
+                
+                <div class="mt-3 pt-2.5 border-t border-slate-700/50 flex justify-between items-center text-xs text-slate-500 shrink-0">
+                    <span id="stock-last-update">等待更新...</span>
+                    <button onclick="fetchStockData()" class="hover:text-white transition-colors"><i class="fa-solid fa-rotate"></i></button>
+                </div>
+            </section>
 
-        // User Configuration
-        let userConfig = {
-            finnhubKey: 'da7rccpr01qj8fm7ttd0da7rccpr01qj8fm7ttdg',
-            stocks: '0700.HK, AAPL, NVDA, MU, VTI',
-            mtrLine: 'TML',
-            mtrStation: 'TIS',
-            rapidApiKey: '3b6cb50d3dmsh8663e9b3cb4ac4dp1e46a5jsn489c72119547'
-        };
+            <!-- 最新足球比賽比分 -->
+            <section class="grid-card min-h-[300px] flex flex-col">
+                <div class="card-header justify-between">
+                    <div class="flex items-center gap-2"><i class="fa-solid fa-futbol text-emerald-400"></i> 最新足球賽事</div>
+                    <button onclick="fetchFootballScores()" class="hover:text-white text-slate-400 transition-colors" title="重新整理賽事">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                </div>
 
-        // Load config from localStorage
-        function loadUserConfig() {
-            const saved = localStorage.getItem('dashboard_config');
-            if (saved) {
-                try {
-                    userConfig = { ...userConfig, ...JSON.parse(saved) };
-                } catch(e) {}
-            }
-        }
+                <div id="football-scores-container" class="flex flex-col gap-2.5 overflow-y-auto pr-1 flex-grow max-h-[320px]">
+                    <div class="text-center py-8 text-slate-500 text-sm"><i class="fa-solid fa-spinner fa-spin mr-2"></i>載入賽事數據中...</div>
+                </div>
+            </section>
 
-        function saveUserConfig() {
-            localStorage.setItem('dashboard_config', JSON.stringify(userConfig));
-        }
+            <!-- 即時新聞 -->
+            <section class="grid-card min-h-[300px] flex flex-col">
+                <div class="card-header justify-between">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-regular fa-newspaper text-sky-400"></i>
+                        <span>即時新聞</span>
+                        <!-- 新聞類別切換標籤 (本地 / 體育) -->
+                        <div class="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-700/80 ml-1">
+                            <button id="tab-btn-local" onclick="switchNewsCategory('local')" class="px-2 py-0.5 text-xs rounded-md transition-colors font-medium bg-blue-600 text-white shadow-sm">本地</button>
+                            <button id="tab-btn-sports" onclick="switchNewsCategory('sports')" class="px-2 py-0.5 text-xs rounded-md transition-colors font-medium text-slate-400 hover:text-white">體育</button>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="news-update-time" class="text-[10px] text-slate-400 font-mono">--:-- 更新</span>
+                        <button onclick="fetchLiveNews()" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs transition-colors">
+                            <i class="fa-solid fa-rotate" id="news-refresh-icon"></i>
+                        </button>
+                    </div>
+                </div>
 
-        // Initialize Lucide icons
-        lucide.createIcons();
+                <div id="news-list-container" class="flex flex-col gap-3 overflow-y-auto pr-1.5 flex-grow max-h-[320px]">
+                    <div class="text-center py-12 text-slate-500 text-sm"><i class="fa-solid fa-spinner fa-spin mr-2"></i>載入最新新聞中...</div>
+                </div>
+            </section>
 
-        // Clock Function
-        function updateClock() {
-            const now = new Date();
-            document.getElementById('time-display').textContent = now.toLocaleTimeString('zh-HK', { hour12: false });
-            document.getElementById('date-display').textContent = now.toLocaleDateString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit' });
-            const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-            document.getElementById('weekday-display').textContent = weekdays[now.getDay()];
-        }
-        setInterval(updateClock, 1000);
-        updateClock();
+        </div>
 
-        // 1. Football Scores API Integration
-        async function fetchFootballData() {
-            const container = document.getElementById('football-list-container');
-            if (!container) return;
-
-            const apiKey = userConfig.rapidApiKey || '3b6cb50d3dmsh8663e9b3cb4ac4dp1e46a5jsn489c72119547';
-
-            try {
-                const res = await fetch('https://free-api-live-football-data.p.rapidapi.com/football-current-live', {
-                    method: 'GET',
-                    headers: {
-                        'x-rapidapi-key': apiKey,
-                        'x-rapidapi-host': 'free-api-live-football-data.p.rapidapi.com',
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
-                const json = await res.json();
-
-                // Extract match data from varying json properties
-                let matches = [];
-                if (Array.isArray(json)) {
-                    matches = json;
-                } else if (json.response && Array.isArray(json.response.live)) {
-                    matches = json.response.live;
-                } else if (json.response && Array.isArray(json.response)) {
-                    matches = json.response;
-                } else if (json.data && Array.isArray(json.data)) {
-                    matches = json.data;
-                } else if (json.results && Array.isArray(json.results)) {
-                    matches = json.results;
-                }
-
-                if (!matches || matches.length === 0) {
-                    container.innerHTML = '<div class="text-slate-400 text-sm text-center py-4">目前沒有進行中的即時比賽</div>';
-                    return;
-                }
-
-                let html = '';
-                matches.slice(0, 10).forEach(m => {
-                    const homeName = m.home?.name || m.homeTeam?.name || m.teams?.home?.name || m.home || '主隊';
-                    const awayName = m.away?.name || m.awayTeam?.name || m.teams?.away?.name || m.away || '客隊';
-                    
-                    const homeScore = m.home?.score ?? m.scores?.home ?? m.goals?.home ?? m.homeScore ?? 0;
-                    const awayScore = m.away?.score ?? m.scores?.away ?? m.goals?.away ?? m.awayScore ?? 0;
-                    
-                    const status = m.status || m.time || m.fixture?.status?.short || 'Live';
-                    const league = m.league?.name || m.tournament?.name || '即時賽事';
-
-                    html += `
-                        <div class="bg-slate-800/60 rounded-lg p-2.5 border border-slate-700/50 flex flex-col gap-1.5">
-                            <div class="flex justify-between items-center text-xs text-slate-400">
-                                <span class="truncate max-w-[140px]">${league}</span>
-                                <span class="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 text-[10px] font-medium border border-emerald-800/50">${status}</span>
+        <!-- 底部全寬區域 (天氣資訊) -->
+        <div class="w-full shrink-0">
+            <section class="grid-card relative overflow-hidden group py-4 px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div class="absolute inset-0 bg-gradient-to-r from-sky-900/20 via-slate-900/50 to-blue-900/20 z-0"></div>
+                
+                <div class="flex items-center gap-3 z-10 w-full md:w-auto">
+                    <i class="fa-solid fa-cloud-sun-rain text-sky-400 text-2xl"></i>
+                    <h2 class="text-xl font-bold text-white m-0 tracking-wide">天氣資訊</h2>
+                </div>
+                
+                <div class="flex flex-col sm:flex-row items-center gap-6 z-10 w-full justify-around md:justify-end">
+                    <div class="flex items-center gap-4">
+                        <div id="weather-icon-container" class="text-4xl filter drop-shadow-md">🌤️</div>
+                        <div class="flex flex-col items-start">
+                            <div class="flex items-baseline gap-1">
+                                <span id="weather-temp" class="text-3xl font-bold text-white tracking-tighter">--</span>
+                                <span class="text-lg text-slate-400">°C</span>
                             </div>
-                            <div class="flex justify-between items-center text-xs font-semibold">
-                                <div class="flex-1 text-right truncate pr-2 text-slate-200">${homeName}</div>
-                                <div class="px-2.5 py-0.5 bg-slate-900 rounded font-mono text-amber-400 border border-slate-700 text-xs">${homeScore} - ${awayScore}</div>
-                                <div class="flex-1 text-left truncate pl-2 text-slate-200">${awayName}</div>
+                            <div id="weather-location" class="text-xs text-sky-300 font-medium flex items-center gap-1 cursor-pointer hover:text-sky-200" onclick="requestGPSLocation()" title="點擊重新定位">
+                                <i class="fa-solid fa-location-crosshairs"></i> 定位中...
                             </div>
                         </div>
-                    `;
-                });
-                container.innerHTML = html;
-            } catch (err) {
-                console.error('Football API fetch error:', err);
-                container.innerHTML = '<div class="text-rose-400 text-sm text-center py-4">無法載入比分數據，請檢查 API Key</div>';
+                    </div>
+                    
+                    <div class="h-10 w-px bg-slate-700 hidden sm:block"></div>
+                    
+                    <div class="flex flex-wrap justify-center gap-4 text-sm bg-slate-900/50 px-4 py-2 rounded-xl border border-slate-700/50">
+                        <div class="flex items-center gap-2 text-slate-300">
+                            <i class="fa-solid fa-droplet text-blue-400"></i> 濕度 <span id="weather-humidity" class="font-bold text-white">--%</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-slate-300">
+                            <i class="fa-solid fa-sun text-amber-400"></i> UV <span id="weather-uv" class="font-bold text-white">--</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-slate-300">
+                            <i class="fa-solid fa-triangle-exclamation text-rose-400"></i> <span id="weather-warning" class="text-rose-300">無警告</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+    </main>
+
+    <!-- 模態框：API / 系統設定 -->
+    <div id="settings-modal" class="fixed inset-0 bg-slate-900/80 modal-backdrop z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="p-5 border-b border-slate-700 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white"><i class="fa-solid fa-sliders text-blue-400 mr-2"></i>系統設定</h2>
+                <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            
+            <div class="p-5 overflow-y-auto flex-grow space-y-5">
+                
+                <!-- 跨裝置雲端同步設定 -->
+                <div class="bg-blue-950/40 p-4 rounded-xl border border-blue-500/30">
+                    <h3 class="text-sm font-semibold text-blue-300 mb-2 flex items-center justify-between">
+                        <span class="flex items-center gap-2"><i class="fa-solid fa-cloud text-blue-400"></i> 跨裝置雲端同步</span>
+                        <span id="modal-sync-badge" class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">未同步</span>
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-3">在不同裝置輸入相同的「同步碼」，即可自動同步設定。</p>
+                    
+                    <div class="flex gap-2 mb-3">
+                        <input type="text" id="setting-sync-id" placeholder="例如: MY-DASH-88" class="flex-grow bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white font-mono focus:border-blue-500 focus:outline-none uppercase">
+                        <button type="button" onclick="generateRandomSyncId()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 shrink-0" title="隨機產生同步碼">
+                            <i class="fa-solid fa-dice"></i> 隨機
+                        </button>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="toggleQRCodeDisplay()" class="flex-1 py-2 px-3 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 rounded-lg text-xs text-blue-300 transition-colors flex items-center justify-center gap-1.5 font-medium">
+                            <i class="fa-solid fa-qrcode"></i> 手機掃描配對
+                        </button>
+                        <button type="button" onclick="copyShareLink()" class="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition-colors flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-link"></i> 複製配對連結
+                        </button>
+                    </div>
+
+                    <!-- QR Code 顯示區域 -->
+                    <div id="qrcode-wrapper" class="hidden mt-3 p-4 bg-white rounded-xl flex flex-col items-center justify-center gap-2 transition-all">
+                        <div id="qrcode-container"></div>
+                        <p class="text-xs text-slate-800 font-medium text-center m-0">用手機相機掃描上方 QR Code，即可直接開啟並同步！</p>
+                    </div>
+                </div>
+
+                <!-- 港鐵 MTR 設定 -->
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2"><i class="fa-solid fa-train text-amber-500"></i> 港鐵 MTR 到站設定</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">路線</label>
+                            <select id="setting-mtr-line" onchange="updateStationOptions(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 focus:outline-none">
+                                <option value="TWL">荃灣綫 (TWL)</option>
+                                <option value="KTL">觀塘綫 (KTL)</option>
+                                <option value="ISL">港島綫 (ISL)</option>
+                                <option value="EAL">東鐵綫 (EAL)</option>
+                                <option value="TML">屯馬綫 (TML)</option>
+                                <option value="TCL">東涌綫 (TCL)</option>
+                                <option value="TKL">將軍澳綫 (TKL)</option>
+                                <option value="AEL">機場快綫 (AEL)</option>
+                                <option value="SIL">南港島綫 (SIL)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">車站</label>
+                            <select id="setting-mtr-sta" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white uppercase focus:border-blue-500 focus:outline-none">
+                                <!-- 車站選項將由 JavaScript 自動載入 -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 足球賽事顯示設定 -->
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-300 mb-2 flex items-center justify-between">
+                        <span class="flex items-center gap-2"><i class="fa-solid fa-futbol text-emerald-400"></i> 足球賽事顯示設定 (ESPN API)</span>
+                        <span id="league-count-badge" class="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-400 font-mono">已選 0/10</span>
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-2">直接接入 ESPN 官方 API (免 API Key)，點選關注的聯賽：</p>
+                    
+                    <div class="flex gap-2 mb-2.5">
+                        <button type="button" onclick="clearLeagueSelection()" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-700 border border-slate-700 rounded text-[11px] text-slate-300 transition-colors">
+                            <i class="fa-solid fa-circle-xmark mr-1"></i>清空選擇
+                        </button>
+                        <button type="button" onclick="resetFootballLeagues()" class="px-2.5 py-1 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 rounded text-[11px] text-emerald-300 transition-colors">
+                            <i class="fa-solid fa-rotate-left mr-1"></i>重置為五大聯賽與歐聯
+                        </button>
+                    </div>
+
+                    <div id="league-chips-container" class="flex flex-wrap gap-1.5 mb-2.5">
+                        <!-- 選項按鈕將由 JavaScript 動態生成 -->
+                    </div>
+
+                    <div id="league-warning-msg" class="hidden text-xs text-rose-400 mb-2 font-medium flex items-center gap-1">
+                        <i class="fa-solid fa-circle-exclamation"></i> 最多只能選擇 10 個比賽項目！
+                    </div>
+
+                    <div class="flex gap-2">
+                        <input type="text" id="setting-custom-league" placeholder="新增 ESPN 聯賽 Slug (如: chn.1, arg.1)" class="flex-grow bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:border-blue-500 focus:outline-none font-mono">
+                        <button type="button" onclick="addCustomLeague()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 shrink-0 flex items-center gap-1">
+                            <i class="fa-solid fa-plus"></i> 新增
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 股票設定 -->
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2"><i class="fa-solid fa-chart-line text-emerald-400"></i> 股票設定</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Finnhub API Key (選填)</label>
+                            <input type="text" id="setting-finnhub-key" placeholder="輸入 Finnhub API Key" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:border-blue-500 focus:outline-none font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">股票代碼 (以逗號分隔)</label>
+                            <input type="text" id="setting-stocks" placeholder="例如: HSI, 0700.HK, 9988.HK, AAPL" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:border-blue-500 focus:outline-none font-mono">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 即時新聞 RSS 設定 (支援本地與體育分開錄入) -->
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2"><i class="fa-regular fa-newspaper text-sky-400"></i> 即時新聞 RSS 設定</h3>
+                    <p class="text-xs text-slate-400 mb-2 font-normal">您可以分別設定「本地」與「體育」新聞的 RSS 網址（<b>每行一個網址</b>）：</p>
+                    
+                    <!-- 本地新聞 RSS -->
+                    <div class="space-y-1.5 mb-3">
+                        <label class="block text-xs font-semibold text-sky-300"><i class="fa-solid fa-location-dot mr-1"></i> 本地新聞 RSS 來源</label>
+                        <textarea id="setting-rss-local" rows="3" placeholder="例如:&#10;https://rthk.hk/rthk/news/rss/c_expressnews_clocal.xml" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:border-blue-500 focus:outline-none font-mono resize-none leading-relaxed"></textarea>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="text-[10px] text-slate-400 self-center">快速加入：</span>
+                            <button type="button" onclick="addRssPreset('setting-rss-local', 'https://rthk.hk/rthk/news/rss/c_expressnews_clocal.xml')" class="px-2 py-0.5 bg-slate-900 border border-slate-700 hover:border-sky-500 rounded text-[10px] text-sky-300 transition-colors">+ 港台本地</button>
+                            <button type="button" onclick="addRssPreset('setting-rss-local', 'https://feeds.bbci.co.uk/tradchinese/rss.xml')" class="px-2 py-0.5 bg-slate-900 border border-slate-700 hover:border-sky-500 rounded text-[10px] text-sky-300 transition-colors">+ BBC 中文</button>
+                        </div>
+                    </div>
+
+                    <!-- 體育新聞 RSS -->
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-semibold text-emerald-300"><i class="fa-solid fa-futbol mr-1"></i> 體育新聞 RSS 來源</label>
+                        <textarea id="setting-rss-sports" rows="3" placeholder="例如:&#10;https://rthk.hk/rthk/news/rss/c_expressnews_csport.xml" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:border-blue-500 focus:outline-none font-mono resize-none leading-relaxed"></textarea>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="text-[10px] text-slate-400 self-center">快速加入：</span>
+                            <button type="button" onclick="addRssPreset('setting-rss-sports', 'https://rthk.hk/rthk/news/rss/c_expressnews_csport.xml')" class="px-2 py-0.5 bg-slate-900 border border-slate-700 hover:border-emerald-500 rounded text-[10px] text-emerald-300 transition-colors">+ 港台體育</button>
+                            <button type="button" onclick="addRssPreset('setting-rss-sports', 'https://sports.yahoo.com/rss/')" class="px-2 py-0.5 bg-slate-900 border border-slate-700 hover:border-emerald-500 rounded text-[10px] text-emerald-300 transition-colors">+ Yahoo 體育</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="p-4 border-t border-slate-700 flex justify-end gap-3 shrink-0">
+                <button type="button" onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-sm transition-colors">取消</button>
+                <button type="button" onclick="saveSettings()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl text-sm transition-colors">儲存變更</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase 雲端同步模組 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-dashboard-app';
+        let db = null;
+        let auth = null;
+        let unsubscribeSync = null;
+
+        let firebaseConfig = null;
+        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+            try { 
+                if (typeof __firebase_config === 'string' && __firebase_config.trim()) {
+                    firebaseConfig = JSON.parse(__firebase_config);
+                } else if (typeof __firebase_config === 'object') {
+                    firebaseConfig = __firebase_config;
+                }
+            } catch(e) {
+                console.warn("Firebase config parse skipped:", e);
             }
         }
 
-        // 2. MTR Schedule API
-        async function fetchMtrData() {
-            const container = document.getElementById('train-container');
-            if (!container) return;
+        if (firebaseConfig) {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
 
-            try {
-                const res = await fetch(`https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php?line=${userConfig.mtrLine}&sta=${userConfig.mtrStation}`);
-                const data = await res.json();
-
-                if (data.status === 0 || !data.data) {
-                    container.innerHTML = '<div class="text-slate-400 text-sm py-2">查無該車站數據</div>';
-                    return;
-                }
-
-                const key = `${userConfig.mtrLine}-${userConfig.mtrStation}`;
-                const stationData = data.data[key];
-
-                if (!stationData) {
-                    container.innerHTML = '<div class="text-slate-400 text-sm py-2">暫無班次資料</div>';
-                    return;
-                }
-
-                let html = '';
-                ['UP', 'DOWN'].forEach(dir => {
-                    const list = stationData[dir];
-                    if (list && list.length > 0) {
-                        const nextTrain = list[0];
-                        const dest = nextTrain.dest || '未知';
-                        const ttnt = nextTrain.ttnt || '0';
-                        html += `
-                            <div class="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50 text-xs">
-                                <span class="text-slate-300">往 ${dest}</span>
-                                <span class="text-emerald-400 font-bold font-mono">${ttnt} 分鐘</span>
-                            </div>
-                        `;
-                    }
-                });
-
-                container.innerHTML = html || '<div class="text-slate-400 text-sm py-2">目前沒有列車資訊</div>';
-            } catch (err) {
-                container.innerHTML = '<div class="text-rose-400 text-sm py-2">鐵路數據讀取失敗</div>';
-            }
-        }
-
-        // 3. Stock Data API
-        async function fetchStockData() {
-            const container = document.getElementById('stock-list-container');
-            const badge = document.getElementById('stock-source-badge');
-            if (!container) return;
-
-            badge.textContent = 'Finnhub 即時';
-            const stocksArr = userConfig.stocks.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-
-            if (stocksArr.length === 0) {
-                container.innerHTML = '<div class="text-slate-400 text-sm py-2">請設定追蹤股票</div>';
-                return;
-            }
-
-            let html = '';
-            for (let symbol of stocksArr) {
+            const initAuth = async () => {
                 try {
-                    let formattedSymbol = symbol;
-                    if (/^\d{3,4}\.HK$/.test(symbol)) {
-                        formattedSymbol = symbol.padStart(7, '0');
-                    }
-
-                    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${formattedSymbol}&token=${userConfig.finnhubKey}`);
-                    const data = await res.json();
-
-                    if (data && data.c !== undefined && data.c !== 0) {
-                        const price = data.c.toFixed(2);
-                        const change = (data.c - data.pc).toFixed(2);
-                        const isUp = change >= 0;
-
-                        html += `
-                            <div class="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50 text-xs">
-                                <span class="font-bold text-slate-200">${symbol}</span>
-                                <div class="text-right font-mono">
-                                    <div class="text-slate-100">$${price}</div>
-                                    <div class="${isUp ? 'text-emerald-400' : 'text-rose-400'}">${isUp ? '+' : ''}${change}</div>
-                                </div>
-                            </div>
-                        `;
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
                     } else {
-                        html += `
-                            <div class="flex justify-between items-center bg-slate-800/30 p-2 rounded border border-slate-800 text-xs text-slate-500">
-                                <span>${symbol}</span>
-                                <span>查無資料</span>
-                            </div>
-                        `;
+                        await signInAnonymously(auth);
                     }
                 } catch(e) {
-                    html += `
-                        <div class="flex justify-between items-center bg-slate-800/30 p-2 rounded border border-slate-800 text-xs text-rose-400">
-                            <span>${symbol}</span>
-                            <span>載入失敗</span>
-                        </div>
-                    `;
+                    try { await signInAnonymously(auth); } catch(err){}
                 }
-            }
-            container.innerHTML = html;
-        }
+            };
 
-        // 4. Real-time News API
-        async function fetchNewsData() {
-            const container = document.getElementById('news-container');
-            if (!container) return;
-
-            try {
-                const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc');
-                const data = await res.json();
-
-                let html = '';
-                const keys = Object.keys(data);
-
-                if (keys.length > 0) {
-                    keys.forEach(k => {
-                        const item = data[k];
-                        html += `
-                            <div class="bg-slate-800/50 p-2.5 rounded border border-slate-700/50 text-xs">
-                                <div class="font-bold text-amber-300 mb-1">${item.name || '特別天氣警告'}</div>
-                                <div class="text-slate-300 line-clamp-2">${item.actionCode || '請留意最新天氣變化與警告狀況。'}</div>
-                            </div>
-                        `;
-                    });
-                } else {
-                    html = `
-                        <div class="bg-slate-800/50 p-2.5 rounded border border-slate-700/50 text-xs">
-                            <div class="font-bold text-sky-300 mb-1">即時新聞 / 天氣狀況正常</div>
-                            <div class="text-slate-300">目前沒有生效的天氣警告或緊急特別新聞。新聞頻道運作正常。</div>
-                        </div>
-                    `;
-                }
-                container.innerHTML = html;
-            } catch(e) {
-                container.innerHTML = '<div class="text-slate-400 text-sm py-2">無法獲取最新新聞</div>';
-            }
-        }
-
-        // 5. Weather Info API
-        async function fetchWeatherData() {
-            const container = document.getElementById('weather-container');
-            const locationEl = document.getElementById('weather-location');
-
-            try {
-                const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc');
-                const data = await res.json();
-
-                if (locationEl) locationEl.textContent = '香港天文台';
-
-                const temp = data.temperature?.data[0]?.value || '--';
-                const humidity = data.humidity?.data[0]?.value || '--';
-                const warning = data.warningMessage ? data.warningMessage[0] : '無特殊天氣警告';
-
-                container.innerHTML = `
-                    <div class="flex items-center gap-4">
-                        <div class="text-3xl font-bold font-mono text-amber-300">${temp}°C</div>
-                        <div class="text-xs text-slate-300">
-                            <div>相對濕度: <span class="font-mono text-white">${humidity}%</span></div>
-                            <div class="text-slate-400 mt-0.5">${warning}</div>
-                        </div>
-                    </div>
-                `;
-            } catch(e) {
-                if (container) container.innerHTML = '<div class="text-rose-400 text-sm">天氣數據讀取失敗</div>';
-            }
-        }
-
-        // Modal and Config UI Controls
-        function updateMtrStations() {
-            const lineSelect = document.getElementById('setting-mtr-line');
-            const staSelect = document.getElementById('setting-mtr-sta');
-            const line = lineSelect.value;
-
-            staSelect.innerHTML = '';
-            (mtrStationsMap[line] || []).forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s.code;
-                opt.textContent = `${s.name} (${s.code})`;
-                staSelect.appendChild(opt);
+            initAuth().then(() => {
+                window.cloudSyncReady = true;
+                if (window.onCloudReady) window.onCloudReady();
             });
         }
 
+        window.cloudSyncManager = {
+            async pushData(syncId, data) {
+                if (!db || !auth || !auth.currentUser || !syncId) return;
+                try {
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboards', syncId.toLowerCase());
+                    await setDoc(docRef, { ...data, updatedAt: Date.now() }, { merge: true });
+                    window.updateSyncBadgeStatus(true);
+                } catch(e) {
+                    console.error("Cloud push failed:", e);
+                }
+            },
+            listenData(syncId, callback) {
+                if (!db || !syncId) return;
+                if (unsubscribeSync) unsubscribeSync();
+
+                window.updateSyncBadgeStatus(false, "連線中...");
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dashboards', syncId.toLowerCase());
+                
+                unsubscribeSync = onSnapshot(docRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        callback(docSnap.data());
+                        window.updateSyncBadgeStatus(true);
+                    } else {
+                        window.updateSyncBadgeStatus(true, "新同步碼");
+                    }
+                }, (err) => {
+                    console.error("Cloud listen failed:", err);
+                    window.updateSyncBadgeStatus(false, "連線錯誤");
+                });
+            }
+        };
+    </script>
+
+    <script>
+        /* ================== DATA MAPS & DICTIONARIES ================== */
+        const PRESET_LEAGUES = [
+            { id: 'eng.1', name: '英超', slug: 'eng.1' },
+            { id: 'esp.1', name: '西甲', slug: 'esp.1' },
+            { id: 'ger.1', name: '德甲', slug: 'ger.1' },
+            { id: 'ita.1', name: '意甲', slug: 'ita.1' },
+            { id: 'fra.1', name: '法甲', slug: 'fra.1' },
+            { id: 'uefa.champions', name: '歐聯', slug: 'uefa.champions' },
+            { id: 'uefa.europa', name: '歐霸', slug: 'uefa.europa' },
+            { id: 'usa.1', name: '美職', slug: 'usa.1' },
+            { id: 'jpn.1', name: '日職', slug: 'jpn.1' },
+            { id: 'sau.1', name: '沙特聯', slug: 'sau.1' }
+        ];
+
+        const mtrStationsMap = {
+            TWL: [{c:'CEN',n:'中環'},{c:'ADM',n:'金鐘'},{c:'TST',n:'尖沙咀'},{c:'JOR',n:'佐敦'},{c:'YMT',n:'油麻地'},{c:'MOK',n:'旺角'},{c:'PRIN',n:'太子'},{c:'SSP',n:'深水埗'},{c:'CSW',n:'長沙灣'},{c:'LCK',n:'荔枝角'},{c:'MEI',n:'美孚'},{c:'LAK',n:'荔景'},{c:'KWF',n:'葵芳'},{c:'KVT',n:'葵興'},{c:'TWH',n:'大窩口'},{c:'TWW',n:'荃灣'}],
+            KTL: [{c:'WHA',n:'黃埔'},{c:'HOM',n:'何文田'},{c:'YMT',n:'油麻地'},{c:'MOK',n:'旺角'},{c:'PRIN',n:'太子'},{c:'SKM',n:'石硤尾'},{c:'KOT',n:'九龍塘'},{c:'LOF',n:'樂富'},{c:'WTS',n:'黃大仙'},{c:'DIH',n:'鑽石山'},{c:'CHH',n:'彩虹'},{c:'KOB',n:'九龍灣'},{c:'NTK',n:'牛頭角'},{c:'KWT',n:'觀塘'},{c:'LAT',n:'藍田'},{c:'YAT',n:'油塘'},{c:'TIK',n:'調景嶺'}],
+            ISL: [{c:'KET',n:'堅尼地城'},{c:'HKU',n:'香港大學'},{c:'SYP',n:'西營盤'},{c:'SHW',n:'上環'},{c:'CEN',n:'中環'},{c:'ADM',n:'金鐘'},{c:'WAC',n:'灣仔'},{c:'CAB',n:'銅鑼灣'},{c:'TIH',n:'天后'},{c:'FOH',n:'炮台山'},{c:'NOP',n:'北角'},{c:'QUB',n:'鰂魚涌'},{c:'TAK',n:'太古'},{c:'SWH',n:'西灣河'},{c:'SKW',n:'筲箕灣'},{c:'HFC',n:'杏花邨'},{c:'CHW',n:'柴灣'}],
+            EAL: [{c:'ADM',n:'金鐘'},{c:'EXC',n:'會展'},{c:'HUH',n:'紅磡'},{c:'MOK',n:'旺角東'},{c:'KOT',n:'九龍塘'},{c:'TAW',n:'大圍'},{c:'SHT',n:'沙田'},{c:'FOT',n:'火炭'},{c:'RAC',n:'馬場'},{c:'TAP',n:'大埔墟'},{c:'TWO',n:'太和'},{c:'FAN',n:'粉嶺'},{c:'SHS',n:'上水'},{c:'LOW',n:'羅湖'},{c:'LKM',n:'落馬洲'}],
+            TML: [{c:'WKS',n:'烏溪沙'},{c:'MOS',n:'馬鞍山'},{c:'HEO',n:'恒安'},{c:'TSH',n:'大水坑'},{c:'SHE',n:'石門'},{c:'CIO',n:'第一城'},{c:'STW',n:'沙田圍'},{c:'CKT',n:'車公廟'},{c:'TAW',n:'大圍'},{c:'HIK',n:'顯徑'},{c:'DIH',n:'鑽石山'},{c:'KAT',n:'啟德'},{c:'SUW',n:'宋皇臺'},{c:'TKW',n:'土瓜灣'},{c:'HOM',n:'何文田'},{c:'HUH',n:'紅磡'},{c:'ETS',n:'尖東'},{c:'AUS',n:'柯士甸'},{c:'MEI',n:'美孚'},{c:'TWW',n:'荃灣西'},{c:'KSR',n:'錦上路'},{c:'YUL',n:'元朗'},{c:'LOP',n:'朗屏'},{c:'TIS',n:'天水圍'},{c:'SIH',n:'兆康'},{c:'TUM',n:'屯門'}],
+            TCL: [{c:'HOK',n:'香港'},{c:'KOW',n:'九龍'},{c:'OLY',n:'奧運'},{c:'LAK',n:'荔景'},{c:'TSY',n:'青衣'},{c:'SUN',n:'欣澳'},{c:'TTC',n:'東涌'}],
+            TKL: [{c:'NOP',n:'北角'},{c:'QUB',n:'鰂魚涌'},{c:'YAT',n:'油塘'},{c:'TIK',n:'調景嶺'},{c:'TKO',n:'將軍澳'},{c:'LHA',n:'坑口'},{c:'POA',n:'寶琳'},{c:'LHP',n:'康城'}],
+            AEL: [{c:'HOK',n:'香港'},{c:'KOW',n:'九龍'},{c:'TSY',n:'青衣'},{c:'AIR',n:'機場'},{c:'AWE',n:'博覽館'}],
+            SIL: [{c:'ADM',n:'金鐘'},{c:'OCP',n:'海洋公園'},{c:'WCH',n:'黃竹坑'},{c:'LET',n:'利東'},{c:'SOH',n:'海怡半島'}]
+        };
+
+        const weatherStations = [
+            { name: '京士柏', lat: 22.3119, lng: 114.1728 },
+            { name: '香港天文台', lat: 22.3022, lng: 114.1742 },
+            { name: '黃竹坑', lat: 22.2478, lng: 114.1736 },
+            { name: '打鼓嶺', lat: 22.5286, lng: 114.1567 },
+            { name: '流浮山', lat: 22.4689, lng: 113.9836 },
+            { name: '大埔', lat: 22.4433, lng: 114.1836 },
+            { name: '沙田', lat: 22.4025, lng: 114.2100 },
+            { name: '屯門', lat: 22.3858, lng: 113.9642 },
+            { name: '將軍澳', lat: 22.3158, lng: 114.2556 },
+            { name: '西貢', lat: 22.3836, lng: 114.2708 },
+            { name: '長洲', lat: 22.2011, lng: 114.0267 },
+            { name: '赤鱲角', lat: 22.3094, lng: 113.9219 },
+            { name: '青衣', lat: 22.3442, lng: 114.1100 },
+            { name: '荃灣城門谷', lat: 22.3756, lng: 114.1269 },
+            { name: '香港公園', lat: 22.2783, lng: 114.1622 },
+            { name: '筲箕灣', lat: 22.2819, lng: 114.2361 },
+            { name: '九龍城', lat: 22.3319, lng: 114.1883 },
+            { name: '跑馬地', lat: 22.2706, lng: 114.1828 },
+            { name: '黃大仙', lat: 22.3394, lng: 114.1953 },
+            { name: '觀塘', lat: 22.3186, lng: 114.2247 },
+            { name: '深水埗', lat: 22.3331, lng: 114.1569 }
+        ];
+
+        /* ================== STATE & CONFIG ================== */
+        let userConfig = {
+            syncId: '',
+            finnhubApiKey: 'da7rccpr01qj8fm7ttd0da7rccpr01qj8fm7ttdg',
+            stocks: ['HSI', '0700.HK', '9988.HK', 'AAPL'],
+            mtrLine: 'TWL',
+            mtrSta: 'CEN',
+            footballLeagues: ['eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1', 'uefa.champions'],
+            activeNewsCategory: 'local',
+            rssUrlsLocal: [
+                'https://rthk.hk/rthk/news/rss/c_expressnews_clocal.xml',
+                'https://feeds.bbci.co.uk/tradchinese/rss.xml'
+            ],
+            rssUrlsSports: [
+                'https://rthk.hk/rthk/news/rss/c_expressnews_csport.xml'
+            ]
+        };
+
+        let tempSelectedLeagues = [];
+        let etaCountdown = 15;
+        let gpsLocation = { lat: 22.31, lng: 114.17, name: '京士柏' };
+
+        /* ================== UTILITIES & HELPERS ================== */
+        async function safeFetchJson(url, options = {}) {
+            try {
+                const res = await fetch(url, options);
+                if (!res.ok) return null;
+                const text = await res.text();
+                if (!text || !text.trim()) return null;
+                return JSON.parse(text);
+            } catch (e) {
+                console.warn("Fetch or JSON parse skipped for URL:", url, e);
+                return null;
+            }
+        }
+
+        function setInputValue(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.value = val !== undefined && val !== null ? val : '';
+        }
+
+        function getInputValue(id) {
+            const el = document.getElementById(id);
+            return el ? el.value.trim() : '';
+        }
+
+        function updateSyncBadgeStatus(isConnected, customText = null) {
+            const dot = document.getElementById('sync-dot');
+            const text = document.getElementById('sync-status-text');
+            const modalBadge = document.getElementById('modal-sync-badge');
+
+            if (isConnected) {
+                if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+                if (text) text.textContent = customText || `已同步 (${userConfig.syncId})`;
+                if (modalBadge) {
+                    modalBadge.className = "text-[10px] px-2 py-0.5 rounded bg-emerald-900/50 text-emerald-300 font-mono border border-emerald-700/50";
+                    modalBadge.textContent = "雲端同步中";
+                }
+            } else {
+                if (dot) dot.className = "w-2 h-2 rounded-full bg-amber-400";
+                if (text) text.textContent = customText || "未設定同步";
+                if (modalBadge) {
+                    modalBadge.className = "text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono";
+                    modalBadge.textContent = customText || "未設定";
+                }
+            }
+        }
+
+        function generateRandomSyncId() {
+            const randomCode = 'DASH-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+            setInputValue('setting-sync-id', randomCode);
+        }
+
+        function toggleQRCodeDisplay() {
+            const wrapper = document.getElementById('qrcode-wrapper');
+            const container = document.getElementById('qrcode-container');
+            if (!wrapper || !container) return;
+            
+            if (!wrapper.classList.contains('hidden')) {
+                wrapper.classList.add('hidden');
+                return;
+            }
+
+            const currentSyncId = getInputValue('setting-sync-id');
+            if (!currentSyncId) {
+                alert("請先輸入或產生一個「同步碼」！");
+                return;
+            }
+
+            container.innerHTML = '';
+            const shareUrl = new URL(window.location.href);
+            shareUrl.searchParams.set('sync', currentSyncId);
+
+            new QRCode(container, {
+                text: shareUrl.toString(),
+                width: 150,
+                height: 150,
+                colorDark : "#0f172a",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+
+            wrapper.classList.remove('hidden');
+        }
+
+        function copyShareLink() {
+            const currentSyncId = getInputValue('setting-sync-id');
+            if (!currentSyncId) {
+                alert("請先輸入或產生一個「同步碼」！");
+                return;
+            }
+            const shareUrl = new URL(window.location.href);
+            shareUrl.searchParams.set('sync', currentSyncId);
+            
+            const tempInput = document.createElement('input');
+            tempInput.value = shareUrl.toString();
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            
+            alert("已複製配對連結！將連結傳送到手機或平板開啟即可直接同步。");
+        }
+
+        function syncToCloud() {
+            if (window.cloudSyncManager && userConfig.syncId) {
+                window.cloudSyncManager.pushData(userConfig.syncId, {
+                    config: userConfig
+                });
+            }
+        }
+
+        function setupCloudListener() {
+            if (window.cloudSyncManager && userConfig.syncId) {
+                window.cloudSyncManager.listenData(userConfig.syncId, (data) => {
+                    if (!data) return;
+                    if (data.config) {
+                        userConfig = { ...userConfig, ...data.config };
+                        localStorage.setItem('dashCfg', JSON.stringify(userConfig));
+                    }
+                    fetchAllData();
+                });
+            }
+        }
+
+        /* ================== CLOCK & FULLSCREEN ================== */
+        function startClock() {
+            function update() {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const date = String(now.getDate()).padStart(2, '0');
+                const days = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+                const dayStr = days[now.getDay()];
+
+                const hours = String(now.getHours()).padStart(2, '0');
+                const mins = String(now.getMinutes()).padStart(2, '0');
+                const secs = String(now.getSeconds()).padStart(2, '0');
+
+                const dateEl = document.getElementById('clock-date');
+                const timeEl = document.getElementById('clock-time');
+                const secEl = document.getElementById('clock-sec');
+
+                if (dateEl) dateEl.textContent = `${year}年${month}月${date}日 ${dayStr}`;
+                if (timeEl) timeEl.textContent = `${hours}:${mins}`;
+                if (secEl) secEl.textContent = secs;
+            }
+            update();
+            setInterval(update, 1000);
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                }
+            }
+        }
+
+        /* ================== GPS GEOLOCATION ================== */
+        function requestGPSLocation() {
+            const locLabel = document.getElementById('weather-location');
+            if (locLabel) locLabel.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 定位中...';
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        
+                        let nearest = weatherStations[0];
+                        let minDist = Infinity;
+                        weatherStations.forEach(st => {
+                            const d = Math.hypot(st.lat - lat, st.lng - lng);
+                            if (d < minDist) {
+                                minDist = d;
+                                nearest = st;
+                            }
+                        });
+                        
+                        gpsLocation = { lat, lng, name: nearest.name };
+                        if (locLabel) locLabel.innerHTML = `<i class="fa-solid fa-location-dot"></i> ${nearest.name}`;
+                        fetchHKOWeather();
+                    },
+                    (err) => {
+                        console.warn("GPS Location error or denied:", err);
+                        gpsLocation = { lat: 22.3119, lng: 114.1728, name: '京士柏' };
+                        if (locLabel) locLabel.innerHTML = `<i class="fa-solid fa-location-dot"></i> 京士柏 (預設)`;
+                        fetchHKOWeather();
+                    },
+                    { timeout: 8000 }
+                );
+            } else {
+                gpsLocation = { lat: 22.3119, lng: 114.1728, name: '京士柏' };
+                if (locLabel) locLabel.innerHTML = `<i class="fa-solid fa-location-dot"></i> 京士柏`;
+                fetchHKOWeather();
+            }
+        }
+
+        /* ================== WEATHER API ================== */
+        async function fetchHKOWeather() {
+            try {
+                const [wData, warnDataRaw] = await Promise.all([
+                    safeFetchJson('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc'),
+                    safeFetchJson('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc')
+                ]);
+
+                if (!wData) return;
+                const warnData = warnDataRaw || {};
+
+                // 氣溫
+                if (wData.temperature && wData.temperature.data) {
+                    const tempObj = wData.temperature.data.find(t => t.place === gpsLocation.name) || wData.temperature.data[0];
+                    const tempEl = document.getElementById('weather-temp');
+                    if (tempEl && tempObj) tempEl.textContent = tempObj.value;
+                }
+
+                // 濕度
+                if (wData.humidity && wData.humidity.data && wData.humidity.data.length > 0) {
+                    const humEl = document.getElementById('weather-humidity');
+                    if (humEl) humEl.textContent = `${wData.humidity.data[0].value}%`;
+                }
+
+                // 紫外線指數
+                const uvEl = document.getElementById('weather-uv');
+                if (uvEl) {
+                    if (wData.uvindex && wData.uvindex.data && wData.uvindex.data.length > 0) {
+                        uvEl.textContent = wData.uvindex.data[0].value || '0';
+                    } else {
+                        uvEl.textContent = '0';
+                    }
+                }
+
+                // 天氣圖示
+                const iconContainer = document.getElementById('weather-icon-container');
+                if (iconContainer && wData.icon && wData.icon.length > 0) {
+                    const iconCode = wData.icon[0];
+                    iconContainer.innerHTML = getHKOWeatherEmoji(iconCode);
+                }
+
+                // 天氣警告
+                const warnEl = document.getElementById('weather-warning');
+                if (warnEl) {
+                    const warnKeys = Object.keys(warnData);
+                    if (warnKeys.length > 0) {
+                        const warnNames = warnKeys.map(k => warnData[k].name || k).join(', ');
+                        warnEl.textContent = warnNames;
+                        warnEl.className = "text-rose-400 font-bold animate-pulse";
+                    } else {
+                        warnEl.textContent = "無警告";
+                        warnEl.className = "text-emerald-400 font-normal";
+                    }
+                }
+            } catch (e) {
+                console.error("HKO Weather fetch error:", e);
+            }
+        }
+
+        function getHKOWeatherEmoji(code) {
+            if ([50, 51, 52].includes(code)) return '☀️'; 
+            if ([53, 54, 60, 61].includes(code)) return '🌤️'; 
+            if ([62, 63, 64, 65].includes(code)) return '🌧️'; 
+            if ([66, 67, 68, 69].includes(code)) return '🌩️'; 
+            return '⛅';
+        }
+
+        /* ================== STOCK API ================== */
+        async function fetchStockData() {
+            const container = document.getElementById('stock-list-container');
+            const badge = document.getElementById('stock-source-badge');
+            const updateTimeEl = document.getElementById('stock-last-update');
+            if (!container) return;
+
+            const stocks = userConfig.stocks || ['HSI', '0700.HK', '9988.HK', 'AAPL'];
+            const apiKey = userConfig.finnhubApiKey;
+
+            if (badge) badge.textContent = apiKey ? 'Finnhub API' : '即時報價';
+
+            try {
+                let html = '';
+                for (let symbol of stocks) {
+                    let price = '--';
+                    let change = '--';
+                    let percent = '--';
+                    let isUp = true;
+
+                    if (apiKey) {
+                        try {
+                            let formattedSymbol = symbol;
+                            if (symbol === 'HSI') formattedSymbol = '^HSI';
+                            const data = await safeFetchJson(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(formattedSymbol)}&token=${apiKey}`);
+                            if (data && data.c !== undefined && data.c !== 0) {
+                                price = data.c.toFixed(2);
+                                change = (data.d || 0).toFixed(2);
+                                percent = (data.dp || 0).toFixed(2);
+                                isUp = (data.d || 0) >= 0;
+                            }
+                        } catch(err) {
+                            console.warn(`Stock ${symbol} fetch failed:`, err);
+                        }
+                    }
+
+                    if (price === '--') {
+                        const mockMap = {
+                            'HSI': { p: 17820.50, c: +125.30, dp: +0.71 },
+                            '0700.HK': { p: 382.40, c: +4.80, dp: +1.27 },
+                            '9988.HK': { p: 78.60, c: -0.45, dp: -0.57 },
+                            'AAPL': { p: 224.30, c: +1.85, dp: +0.83 }
+                        };
+                        const m = mockMap[symbol.toUpperCase()] || { p: 100.00, c: 1.2, dp: 1.2 };
+                        price = typeof m.p === 'number' ? m.p.toFixed(2) : m.p;
+                        change = (m.c > 0 ? '+' : '') + m.c;
+                        percent = (m.dp > 0 ? '+' : '') + m.dp + '%';
+                        isUp = parseFloat(m.c) >= 0;
+                    } else {
+                        change = (parseFloat(change) >= 0 ? '+' : '') + change;
+                        percent = (parseFloat(percent) >= 0 ? '+' : '') + percent + '%';
+                    }
+
+                    const colorClass = isUp ? 'text-emerald-400' : 'text-rose-400';
+                    const iconClass = isUp ? 'fa-caret-up' : 'fa-caret-down';
+
+                    html += `
+                    <div class="bg-slate-900/50 p-2.5 rounded-xl border border-slate-700/50 flex justify-between items-center hover:border-emerald-500/40 transition-colors">
+                        <div class="font-bold text-sm text-white flex items-center gap-2">
+                            <span>${symbol}</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm font-bold text-white font-mono">${price}</div>
+                            <div class="text-xs ${colorClass} font-mono flex items-center justify-end gap-1">
+                                <i class="fa-solid ${iconClass}"></i>
+                                <span>${change} (${percent})</span>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+                container.innerHTML = html;
+            } catch (e) {
+                console.error("Stock data fetch error:", e);
+                container.innerHTML = '<div class="text-center py-6 text-slate-500 text-xs">載入股票資訊失敗</div>';
+            } finally {
+                if (updateTimeEl) {
+                    const now = new Date();
+                    updateTimeEl.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} 更新`;
+                }
+            }
+        }
+
+        /* ================== LIVE NEWS API (分頁與多來源支援) ================== */
+        function formatHKTime(dateInput) {
+            if (!dateInput) return '--:--';
+            let d;
+            if (typeof dateInput === 'string') {
+                let str = dateInput.trim();
+                // 若為 rss2json 輸出的 "YYYY-MM-DD HH:MM:SS" (UTC 時間)，轉為標準 ISO UTC 格式
+                if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/.test(str)) {
+                    str = str.replace(' ', 'T') + 'Z';
+                }
+                d = new Date(str);
+            } else {
+                d = new Date(dateInput);
+            }
+
+            if (isNaN(d.getTime())) return '--:--';
+
+            // 強制轉換並格式化為香港時區 Asia/Hong_Kong (UTC+8)
+            return d.toLocaleTimeString('zh-HK', {
+                timeZone: 'Asia/Hong_Kong',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+
+        function switchNewsCategory(category) {
+            userConfig.activeNewsCategory = category;
+            updateNewsCategoryUI();
+            fetchLiveNews();
+        }
+
+        function updateNewsCategoryUI() {
+            const btnLocal = document.getElementById('tab-btn-local');
+            const btnSports = document.getElementById('tab-btn-sports');
+            const cat = userConfig.activeNewsCategory || 'local';
+
+            if (btnLocal && btnSports) {
+                if (cat === 'local') {
+                    btnLocal.className = "px-2 py-0.5 text-xs rounded-md transition-colors font-medium bg-blue-600 text-white shadow-sm";
+                    btnSports.className = "px-2 py-0.5 text-xs rounded-md transition-colors font-medium text-slate-400 hover:text-white";
+                } else {
+                    btnLocal.className = "px-2 py-0.5 text-xs rounded-md transition-colors font-medium text-slate-400 hover:text-white";
+                    btnSports.className = "px-2 py-0.5 text-xs rounded-md transition-colors font-medium bg-blue-600 text-white shadow-sm";
+                }
+            }
+        }
+
+        async function fetchLiveNews() {
+            const container = document.getElementById('news-list-container');
+            const updateTimeEl = document.getElementById('news-update-time');
+            const refreshIcon = document.getElementById('news-refresh-icon');
+
+            if (refreshIcon) refreshIcon.classList.add('animate-spin');
+
+            const category = userConfig.activeNewsCategory || 'local';
+            let urls = category === 'sports' ? userConfig.rssUrlsSports : userConfig.rssUrlsLocal;
+
+            if (!urls || !Array.isArray(urls) || urls.length === 0) {
+                urls = category === 'sports' 
+                    ? ['https://rthk.hk/rthk/news/rss/c_expressnews_csport.xml']
+                    : ['https://rthk.hk/rthk/news/rss/c_expressnews_clocal.xml'];
+            }
+
+            try {
+                // 並行拉取所有 RSS 訂閱來源
+                const fetchPromises = urls.map(async (url) => {
+                    if (!url) return [];
+                    const encodedRssUrl = encodeURIComponent(url);
+                    const data = await safeFetchJson(`https://api.rss2json.com/v1/api.json?rss_url=${encodedRssUrl}`);
+                    if (data && data.status === 'ok' && data.items && data.items.length > 0) {
+                        const channelTitle = data.feed?.title || (category === 'sports' ? '體育新聞' : '本地新聞');
+                        return data.items.map(item => ({ ...item, channelTitle }));
+                    }
+                    return [];
+                });
+
+                const results = await Promise.all(fetchPromises);
+                let allItems = results.flat();
+
+                if (allItems.length > 0) {
+                    const parseHKDateMs = (pubDateStr) => {
+                        if (!pubDateStr) return 0;
+                        let str = String(pubDateStr).trim();
+                        if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/.test(str)) {
+                            str = str.replace(' ', 'T') + 'Z';
+                        }
+                        const d = new Date(str);
+                        return isNaN(d.getTime()) ? 0 : d.getTime();
+                    };
+
+                    // 按發布時間（以香港時間為基準）最新排前
+                    allItems.sort((a, b) => parseHKDateMs(b.pubDate) - parseHKDateMs(a.pubDate));
+
+                    let html = '';
+                    // 顯示最新的 10 則新聞
+                    allItems.slice(0, 10).forEach(item => {
+                        const timeStr = formatHKTime(item.pubDate);
+                        const cleanTitle = item.title ? item.title.replace(/<[^>]*>?/gm, '') : '最新新聞';
+
+                        html += `
+                        <a href="${item.link}" target="_blank" rel="noopener noreferrer" class="group bg-slate-900/50 p-2.5 rounded-xl border border-slate-700/50 hover:border-sky-500/50 transition-all flex flex-col gap-1">
+                            <div class="text-xs text-slate-200 group-hover:text-sky-300 font-medium line-clamp-2 transition-colors">
+                                ${cleanTitle}
+                            </div>
+                            <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono mt-1">
+                                <span><i class="fa-regular fa-clock mr-1"></i>${timeStr}</span>
+                                <span class="text-sky-400 group-hover:underline max-w-[150px] truncate" title="${item.channelTitle}">${item.channelTitle} <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></span>
+                            </div>
+                        </a>`;
+                    });
+                    container.innerHTML = html;
+                } else {
+                    throw new Error('No items from any provided RSS feeds');
+                }
+            } catch(e) {
+                console.warn("RSS fetch fallback:", e);
+                const fallbackLocal = [
+                    { title: '天文台預測未來數天大致天晴，氣溫持續高企', time: '16:30', link: 'https://news.rthk.hk', source: '港台新聞' },
+                    { title: '港鐵表示東鐵綫及荃灣綫班次維持正常運作', time: '16:15', link: 'https://news.rthk.hk', source: '港台新聞' },
+                    { title: '運輸署提醒市民留意傍晚繁忙時段交通情況', time: '15:45', link: 'https://news.rthk.hk', source: '港台新聞' }
+                ];
+                const fallbackSports = [
+                    { title: '港台體育：本地體育聯賽賽事精彩紛呈，球迷熱烈支持', time: '16:00', link: 'https://news.rthk.hk', source: '港台體育' },
+                    { title: '國際體壇動態：各大足球聯賽最新戰況回顧', time: '15:30', link: 'https://news.rthk.hk', source: '港台體育' }
+                ];
+                const fallbackNews = category === 'sports' ? fallbackSports : fallbackLocal;
+
+                let html = '';
+                fallbackNews.forEach(item => {
+                    html += `
+                    <a href="${item.link}" target="_blank" rel="noopener noreferrer" class="group bg-slate-900/50 p-2.5 rounded-xl border border-slate-700/50 hover:border-sky-500/50 transition-all flex flex-col gap-1">
+                        <div class="text-xs text-slate-200 group-hover:text-sky-300 font-medium line-clamp-2 transition-colors">
+                            ${item.title}
+                        </div>
+                        <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono mt-1">
+                            <span><i class="fa-regular fa-clock mr-1"></i>${item.time}</span>
+                            <span class="text-sky-400 group-hover:underline">${item.source} <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></span>
+                        </div>
+                    </a>`;
+                });
+                container.innerHTML = html;
+            } finally {
+                if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+                if (updateTimeEl) {
+                    const now = new Date();
+                    updateTimeEl.textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} 更新`;
+                }
+            }
+        }
+
+        function addRssPreset(targetId, url) {
+            const textarea = document.getElementById(targetId);
+            if (!textarea) return;
+            let current = textarea.value.trim();
+            if (current) {
+                if (!current.includes(url)) {
+                    textarea.value = current + '\n' + url;
+                }
+            } else {
+                textarea.value = url;
+            }
+        }
+
+        function clearRssUrls() {
+            setInputValue('setting-rss-urls', '');
+        }
+
+        /* ================== 1. 鐵路到站時間 ================== */
+        async function fetchTransportETA() {
+            const lineLabel = document.getElementById('mtr-line-label');
+            const staLabel = document.getElementById('mtr-sta-label');
+            if (lineLabel) lineLabel.textContent = userConfig.mtrLine;
+            
+            let staName = userConfig.mtrSta;
+            const staList = mtrStationsMap[userConfig.mtrLine] || [];
+            const foundSta = staList.find(s => s.c === userConfig.mtrSta);
+            if(foundSta) staName = foundSta.n;
+            if (staLabel) staLabel.textContent = staName;
+            
+            const mtrContainer = document.getElementById('mtr-eta-container');
+            if (mtrContainer) {
+                try {
+                    const data = await safeFetchJson(`https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php?line=${userConfig.mtrLine}&sta=${userConfig.mtrSta}`);
+                    
+                    if (data && data.status === 1 && data.data && data.data[`${userConfig.mtrLine}-${userConfig.mtrSta}`]) {
+                        const staData = data.data[`${userConfig.mtrLine}-${userConfig.mtrSta}`];
+                        let html = '';
+                        ['UP', 'DOWN'].forEach(dir => {
+                            if (staData[dir] && staData[dir].length > 0) {
+                                const destCode = staData[dir][0].dest;
+                                let destName = destCode;
+                                staList.forEach(s => { if(s.c === destCode) destName = s.n; });
+
+                                html += `<div class="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700/60">
+                                    <div class="text-[11px] text-slate-400 mb-1 flex items-center gap-1"><i class="fa-solid fa-arrow-right text-blue-400"></i> 往 <span class="text-slate-200 font-bold">${destName}</span></div>
+                                    <div class="flex gap-3 items-baseline">`;
+                                staData[dir].slice(0, 2).forEach((train, idx) => {
+                                    const minStr = calcMinsStr(train.time);
+                                    const isNow = minStr === '即將抵達' || minStr === '到達';
+                                    html += `<span class="${idx===0 ? (isNow?'text-xl font-bold text-rose-400 animate-pulse':'text-xl font-bold text-amber-400') : 'text-xs text-slate-400'}">${idx>0?'次班: ':''}${minStr}</span>`;
+                                });
+                                html += `</div></div>`;
+                            }
+                        });
+                        mtrContainer.innerHTML = html || '<div class="text-slate-400 text-xs py-2 text-center">目前非服務時間或無列車資訊</div>';
+                    } else {
+                        mtrContainer.innerHTML = '<div class="text-slate-400 text-xs py-2 text-center">查無該車站列車數據</div>';
+                    }
+                } catch (e) {
+                    mtrContainer.innerHTML = '<div class="text-rose-400 text-xs py-2 text-center">網絡連線中斷</div>';
+                }
+            }
+            
+            etaCountdown = 15;
+            const etaTimer = document.getElementById('eta-timer');
+            if (etaTimer) etaTimer.textContent = `${etaCountdown}s 後刷新`;
+        }
+        
+        function calcMinsStr(timeStr) {
+            if(!timeStr) return '--';
+            const diff = Math.floor((new Date(timeStr.replace(' ','T')) - new Date()) / 60000);
+            return diff <= 0 ? '即將抵達' : `${diff} 分鐘`;
+        }
+
+        /* ================== 2. 最新足球比賽比分 (ESPN API) ================== */
+        async function fetchFootballScores() {
+            const container = document.getElementById('football-scores-container');
+            if (!container) return;
+
+            let selectedLeagues = userConfig.footballLeagues;
+            if (!selectedLeagues || selectedLeagues.length === 0) {
+                selectedLeagues = ['eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1', 'uefa.champions'];
+            }
+
+            try {
+                // 並行發送 ESPN API 請求
+                const fetchPromises = selectedLeagues.map(slug => 
+                    safeFetchJson(`https://site.api.espn.com/apis/site/v2/sports/soccer/${slug}/scoreboard`)
+                );
+
+                const results = await Promise.all(fetchPromises);
+
+                let allEvents = [];
+                results.forEach((data, index) => {
+                    if (data && data.events && Array.isArray(data.events)) {
+                        const slug = selectedLeagues[index];
+                        const presetObj = PRESET_LEAGUES.find(p => p.slug === slug || p.id === slug);
+                        const leagueName = presetObj ? presetObj.name : (data.leagues?.[0]?.abbreviation || data.leagues?.[0]?.name || slug);
+                        
+                        data.events.forEach(evt => {
+                            allEvents.push({
+                                ...evt,
+                                leagueDisplayName: leagueName
+                            });
+                        });
+                    }
+                });
+
+                if (allEvents.length === 0) {
+                    container.innerHTML = `
+                    <div class="text-center py-8 text-slate-400 text-xs flex flex-col items-center gap-2">
+                        <i class="fa-solid fa-calendar-xmark text-2xl text-slate-500 mb-1"></i>
+                        <span>所選聯賽今日暫無比賽</span>
+                        <button onclick="resetFootballLeagues()" class="mt-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition-colors">
+                            重置為預設熱門聯賽
+                        </button>
+                    </div>`;
+                    return;
+                }
+
+                let html = '';
+                allEvents.slice(0, 15).forEach(evt => {
+                    const comp = evt.competitions?.[0];
+                    if (!comp) return;
+
+                    const home = comp.competitors?.find(c => c.homeAway === 'home');
+                    const away = comp.competitors?.find(c => c.homeAway === 'away');
+
+                    if (!home || !away) return;
+
+                    const homeName = home.team?.shortDisplayName || home.team?.displayName || home.team?.name || '主隊';
+                    const awayName = away.team?.shortDisplayName || away.team?.displayName || away.team?.name || '客隊';
+                    
+                    const homeLogo = home.team?.logo || 'https://placehold.co/20x20/1e293b/ffffff?text=H';
+                    const awayLogo = away.team?.logo || 'https://placehold.co/20x20/1e293b/ffffff?text=A';
+
+                    const statusState = evt.status?.type?.state; // 'pre', 'in', 'post'
+                    const statusDetail = evt.status?.type?.shortDetail || evt.status?.type?.detail || '';
+                    const displayClock = evt.status?.displayClock;
+
+                    let statusBadge = '';
+                    let scoreText = '';
+
+                    if (statusState === 'in') {
+                        // 進行中賽事
+                        const clockText = displayClock ? `${displayClock}'` : (statusDetail || '進行中');
+                        statusBadge = `<span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 font-mono text-[10px] font-bold animate-pulse"><i class="fa-solid fa-circle text-[6px] mr-1"></i>${clockText}</span>`;
+                        scoreText = `${home.score ?? 0} - ${away.score ?? 0}`;
+                    } else if (statusState === 'post') {
+                        // 完場賽事
+                        statusBadge = `<span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono text-[10px]">完場 (FT)</span>`;
+                        scoreText = `${home.score ?? 0} - ${away.score ?? 0}`;
+                    } else {
+                        // 未開賽
+                        const gameDate = new Date(evt.date);
+                        const timeStr = isNaN(gameDate) ? '未開賽' : `${String(gameDate.getHours()).padStart(2, '0')}:${String(gameDate.getMinutes()).padStart(2, '0')}`;
+                        statusBadge = `<span class="px-2 py-0.5 rounded bg-slate-800 text-amber-400 border border-slate-700/80 font-mono text-[10px]"><i class="fa-regular fa-clock mr-1"></i>${timeStr}</span>`;
+                        scoreText = `VS`;
+                    }
+
+                    html += `
+                    <div class="bg-slate-900/50 p-2.5 rounded-xl border border-slate-700/50 flex flex-col gap-2 hover:border-emerald-500/40 transition-colors">
+                        <div class="flex justify-between items-center text-[10px] text-slate-400">
+                            <span class="truncate max-w-[140px] text-slate-300 font-medium">${evt.leagueDisplayName}</span>
+                            ${statusBadge}
+                        </div>
+                        <div class="flex items-center justify-between text-sm font-bold">
+                            <div class="flex items-center gap-2 flex-1 min-w-0">
+                                <img src="${homeLogo}" alt="${homeName}" class="w-5 h-5 object-contain shrink-0" onerror="this.onerror=null;this.src='https://placehold.co/20x20/334155/ffffff?text=H'">
+                                <span class="truncate text-white text-xs">${homeName}</span>
+                            </div>
+                            
+                            <div class="px-2.5 py-0.5 bg-slate-800 rounded border border-slate-700 text-center font-mono text-xs tracking-wider text-amber-400 shrink-0 mx-2">
+                                ${scoreText}
+                            </div>
+                            
+                            <div class="flex items-center justify-end gap-2 flex-1 min-w-0 text-right">
+                                <span class="truncate text-white text-xs">${awayName}</span>
+                                <img src="${awayLogo}" alt="${awayName}" class="w-5 h-5 object-contain shrink-0" onerror="this.onerror=null;this.src='https://placehold.co/20x20/334155/ffffff?text=A'">
+                            </div>
+                        </div>
+                    </div>`;
+                });
+
+                container.innerHTML = html;
+            } catch (e) {
+                console.error("ESPN Football Fetch Error:", e);
+                container.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs">載入 ESPN 足球賽事失敗</div>`;
+            }
+        }
+
+        function resetFootballLeagues() {
+            userConfig.footballLeagues = ['eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1', 'uefa.champions'];
+            localStorage.setItem('dashCfg', JSON.stringify(userConfig));
+            syncToCloud();
+            fetchFootballScores();
+        }
+
+        /* ================== APP FLOW & MODALS ================== */
+        function renderLeagueChips() {
+            const container = document.getElementById('league-chips-container');
+            const badge = document.getElementById('league-count-badge');
+            if (!container) return;
+
+            let html = '';
+            PRESET_LEAGUES.forEach(p => {
+                const isSelected = tempSelectedLeagues.includes(p.slug);
+                const activeStyle = isSelected 
+                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm' 
+                    : 'bg-slate-900/80 text-slate-400 border-slate-700 hover:text-slate-200 hover:border-slate-600';
+
+                html += `
+                <button type="button" onclick="toggleLeagueSelection('${p.slug}')" class="px-2.5 py-1 rounded-lg text-xs font-medium border transition-all flex items-center gap-1 ${activeStyle}">
+                    ${isSelected ? '<i class="fa-solid fa-check text-[10px]"></i>' : ''}
+                    <span>${p.name}</span>
+                    <span class="text-[9px] text-slate-400 font-mono">(${p.slug})</span>
+                </button>`;
+            });
+
+            // 自訂代碼（不在預設清單中）
+            tempSelectedLeagues.forEach(slug => {
+                if (!PRESET_LEAGUES.some(p => p.slug === slug)) {
+                    html += `
+                    <button type="button" onclick="toggleLeagueSelection('${slug}')" class="px-2.5 py-1 rounded-lg text-xs font-medium border transition-all flex items-center gap-1 bg-emerald-600 text-white border-emerald-500">
+                        <i class="fa-solid fa-check text-[10px]"></i>
+                        <span>${slug}</span>
+                    </button>`;
+                }
+            });
+
+            container.innerHTML = html;
+            if (badge) badge.textContent = `已選 ${tempSelectedLeagues.length}/10`;
+        }
+
+        function clearLeagueSelection() {
+            tempSelectedLeagues = [];
+            renderLeagueChips();
+        }
+
+        function toggleLeagueSelection(slug) {
+            const warn = document.getElementById('league-warning-msg');
+            if (warn) warn.classList.add('hidden');
+
+            const idx = tempSelectedLeagues.indexOf(slug);
+            if (idx > -1) {
+                tempSelectedLeagues.splice(idx, 1);
+            } else {
+                if (tempSelectedLeagues.length >= 10) {
+                    if (warn) warn.classList.remove('hidden');
+                    return;
+                }
+                tempSelectedLeagues.push(slug);
+            }
+            renderLeagueChips();
+        }
+
+        function addCustomLeague() {
+            const input = document.getElementById('setting-custom-league');
+            const warn = document.getElementById('league-warning-msg');
+            if (!input) return;
+            const val = input.value.trim().toLowerCase();
+            if (!val) return;
+
+            if (tempSelectedLeagues.length >= 10) {
+                if (warn) warn.classList.remove('hidden');
+                return;
+            }
+
+            if (!tempSelectedLeagues.includes(val)) {
+                tempSelectedLeagues.push(val);
+                input.value = '';
+                renderLeagueChips();
+            }
+        }
+
         function openSettingsModal() {
-            document.getElementById('setting-finnhub-key').value = userConfig.finnhubKey;
-            document.getElementById('setting-stocks').value = userConfig.stocks;
-            document.getElementById('setting-mtr-line').value = userConfig.mtrLine;
-            updateMtrStations();
-            document.getElementById('setting-mtr-sta').value = userConfig.mtrStation;
-            document.getElementById('setting-rapidapi-key').value = userConfig.rapidApiKey;
+            tempSelectedLeagues = userConfig.footballLeagues ? [...userConfig.footballLeagues] : ['eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1', 'uefa.champions'];
+            renderLeagueChips();
+            
+            // 載入「本地」與「體育」RSS 網址列表
+            setInputValue('setting-rss-local', (userConfig.rssUrlsLocal || []).join('\n'));
+            setInputValue('setting-rss-sports', (userConfig.rssUrlsSports || []).join('\n'));
 
             const modal = document.getElementById('settings-modal');
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
+            if (modal) modal.classList.remove('hidden');
         }
 
         function closeSettingsModal() {
             const modal = document.getElementById('settings-modal');
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
+            if (modal) modal.classList.add('hidden');
+            const qrWrapper = document.getElementById('qrcode-wrapper');
+            if (qrWrapper) qrWrapper.classList.add('hidden');
+            const warn = document.getElementById('league-warning-msg');
+            if (warn) warn.classList.add('hidden');
+        }
+
+        function updateStationOptions(lineCode, selectedSta = null) {
+            const staSelect = document.getElementById('setting-mtr-sta');
+            if (!staSelect) return;
+            staSelect.innerHTML = '';
+            
+            const stations = mtrStationsMap[lineCode] || [];
+            stations.forEach(sta => {
+                const opt = document.createElement('option');
+                opt.value = sta.c;
+                opt.textContent = `${sta.n} (${sta.c})`;
+                if (selectedSta === sta.c) opt.selected = true;
+                staSelect.appendChild(opt);
+            });
+        }
+
+        function loadSettings() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlSyncId = urlParams.get('sync');
+
+            const s = localStorage.getItem('dashCfg');
+            if (s && s.trim()) {
+                try { userConfig = {...userConfig, ...JSON.parse(s)}; } catch(e){ console.warn("Saved config parse error skipped:", e); }
+            }
+
+            if (urlSyncId) {
+                userConfig.syncId = urlSyncId.trim().toUpperCase();
+                localStorage.setItem('dashCfg', JSON.stringify(userConfig));
+            }
+
+            // 舊版設定相容升級：無縫移轉至本地與體育分類
+            if (!userConfig.rssUrlsLocal) {
+                if (Array.isArray(userConfig.rssUrls)) userConfig.rssUrlsLocal = userConfig.rssUrls;
+                else if (userConfig.rssUrl) userConfig.rssUrlsLocal = [userConfig.rssUrl];
+                else userConfig.rssUrlsLocal = ['https://rthk.hk/rthk/news/rss/c_expressnews_clocal.xml', 'https://feeds.bbci.co.uk/tradchinese/rss.xml'];
+            }
+            if (!userConfig.rssUrlsSports) {
+                userConfig.rssUrlsSports = ['https://rthk.hk/rthk/news/rss/c_expressnews_csport.xml'];
+            }
+
+            setInputValue('setting-sync-id', userConfig.syncId);
+            setInputValue('setting-finnhub-key', userConfig.finnhubApiKey);
+            setInputValue('setting-stocks', userConfig.stocks ? userConfig.stocks.join(', ') : '');
+            setInputValue('setting-mtr-line', userConfig.mtrLine);
+            
+            updateStationOptions(userConfig.mtrLine, userConfig.mtrSta);
+            updateNewsCategoryUI();
+
+            if (userConfig.syncId) {
+                setupCloudListener();
+            }
         }
 
         function saveSettings() {
-            userConfig.finnhubKey = document.getElementById('setting-finnhub-key').value.trim();
-            userConfig.stocks = document.getElementById('setting-stocks').value.trim();
-            userConfig.mtrLine = document.getElementById('setting-mtr-line').value;
-            userConfig.mtrStation = document.getElementById('setting-mtr-sta').value;
-            userConfig.rapidApiKey = document.getElementById('setting-rapidapi-key').value.trim();
+            const oldSyncId = userConfig.syncId;
+            userConfig.syncId = getInputValue('setting-sync-id').toUpperCase();
+            userConfig.finnhubApiKey = getInputValue('setting-finnhub-key');
+            
+            const stocksVal = getInputValue('setting-stocks');
+            userConfig.stocks = stocksVal ? stocksVal.split(',').map(s=>s.trim()).filter(s=>s) : [];
+            
+            userConfig.mtrLine = getInputValue('setting-mtr-line') || 'TWL';
+            userConfig.mtrSta = getInputValue('setting-mtr-sta').toUpperCase() || 'CEN';
 
-            saveUserConfig();
-            closeSettingsModal();
+            userConfig.footballLeagues = [...tempSelectedLeagues];
 
-            // Refresh views
-            fetchMtrData();
-            fetchStockData();
-            fetchFootballData();
+            // 解析「本地」與「體育」RSS 網址列表
+            const rawRssLocal = getInputValue('setting-rss-local');
+            const rawRssSports = getInputValue('setting-rss-sports');
+
+            userConfig.rssUrlsLocal = rawRssLocal.split(/[\n,]+/).map(u => u.trim()).filter(u => u.length > 0);
+            if (userConfig.rssUrlsLocal.length === 0) {
+                userConfig.rssUrlsLocal = ['https://rthk.hk/rthk/news/rss/c_expressnews_clocal.xml'];
+            }
+
+            userConfig.rssUrlsSports = rawRssSports.split(/[\n,]+/).map(u => u.trim()).filter(u => u.length > 0);
+            if (userConfig.rssUrlsSports.length === 0) {
+                userConfig.rssUrlsSports = ['https://rthk.hk/rthk/news/rss/c_expressnews_csport.xml'];
+            }
+            
+            localStorage.setItem('dashCfg', JSON.stringify(userConfig));
+            closeSettingsModal(); 
+
+            if (userConfig.syncId !== oldSyncId) {
+                setupCloudListener();
+            }
+            
+            syncToCloud();
+            fetchAllData();
         }
 
-        // Timers & Init
-        loadUserConfig();
-        fetchMtrData();
-        fetchFootballData();
-        fetchStockData();
-        fetchNewsData();
-        fetchWeatherData();
+        function fetchAllData() {
+            fetchStockData();
+            fetchTransportETA();
+            fetchFootballScores();
+            fetchLiveNews();
+            fetchHKOWeather();
+        }
 
-        setInterval(fetchMtrData, 30000);
-        setInterval(fetchFootballData, 60000);
-        setInterval(fetchStockData, 60000);
-        setInterval(fetchNewsData, 120000);
-        setInterval(fetchWeatherData, 300000);
+        window.onCloudReady = () => {
+            if (userConfig.syncId) {
+                setupCloudListener();
+            }
+        };
+
+        window.onload = () => {
+            loadSettings();
+            startClock();
+            requestGPSLocation();
+            fetchAllData();
+            
+            setInterval(fetchHKOWeather, 300000); // 5分鐘
+            setInterval(fetchStockData, 15000);   // 15秒
+            setInterval(fetchFootballScores, 60000); // 1分鐘
+            setInterval(fetchLiveNews, 300000);    // 5分鐘
+            
+            setInterval(() => {
+                etaCountdown--;
+                if(etaCountdown <= 0) fetchTransportETA();
+                else {
+                    const timerEl = document.getElementById('eta-timer');
+                    if (timerEl) timerEl.textContent = `${etaCountdown}s 後刷新`;
+                }
+            }, 1000);
+        };
     </script>
 </body>
 </html>
